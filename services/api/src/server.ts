@@ -14,6 +14,9 @@ import {
 } from 'node:http';
 import { randomUUID } from 'node:crypto';
 
+import { CharacterServiceError } from './characters/characterErrors.js';
+import { InMemoryCharacterRepository } from './characters/characterRepository.js';
+import { CustomCharacterService } from './characters/customCharacterService.js';
 import type { RuntimeConfig } from './config.js';
 import { getRuntimeConfig } from './config.js';
 import type { Actor } from './data/accessControl.js';
@@ -42,6 +45,7 @@ type RouteContext = {
   plan?: Plan;
 };
 type ApiDependencies = {
+  characters?: CustomCharacterService;
   reminders: ReminderService;
   snoozes?: SnoozeService;
 };
@@ -79,10 +83,12 @@ export function createServer(
 }
 
 export function createApiDependencies(): ApiDependencies {
+  const characters = new InMemoryCharacterRepository();
   const reminders = new InMemoryReminderRepository();
   const notificationJobs = new InMemoryNotificationJobRepository();
 
   return {
+    characters: new CustomCharacterService(characters, randomUUID),
     reminders: new ReminderService(reminders, randomUUID),
     snoozes: new SnoozeService(reminders, new NotificationJobService(notificationJobs, randomUUID)),
   };
@@ -202,6 +208,58 @@ function mapReminderError(error: unknown): RouteResult {
     REMINDER_PERSISTENCE_UNAVAILABLE: 'service_unavailable',
     REMINDER_SNOOZE_LIMIT_EXCEEDED: 'snooze_limit_exceeded',
     REMINDER_VALIDATION_ERROR: 'invalid_request',
+  } as const satisfies Record<string, string>;
+
+  return {
+    statusCode: statusCodeByError[error.code],
+    payload: {
+      error: apiErrorByCode[error.code],
+      message: error.message,
+      details: error.details as JsonValue,
+    },
+  };
+}
+
+function mapCharacterError(error: unknown): RouteResult {
+  if (error instanceof AuthenticationRequiredError) {
+    return {
+      statusCode: 401,
+      payload: {
+        error: 'authentication_required',
+        message: 'x-user-id header is required',
+      },
+    };
+  }
+
+  if (!(error instanceof CharacterServiceError)) {
+    return {
+      statusCode: 500,
+      payload: {
+        error: 'internal_error',
+        message: 'Unexpected server error',
+      },
+    };
+  }
+
+  const statusCodeByError = {
+    CHARACTER_ACCESS_DENIED: 403,
+    CHARACTER_CUSTOM_LIMIT_EXCEEDED: 402,
+    CHARACTER_ICON_UNAVAILABLE: 422,
+    CHARACTER_NOT_FOUND: 404,
+    CHARACTER_PACK_REQUIRED: 402,
+    CHARACTER_SAFETY_REVIEW_REQUIRED: 422,
+    CHARACTER_SELECTION_LIMIT_EXCEEDED: 402,
+    CHARACTER_VALIDATION_ERROR: 400,
+  } as const satisfies Record<string, number>;
+  const apiErrorByCode = {
+    CHARACTER_ACCESS_DENIED: 'forbidden',
+    CHARACTER_CUSTOM_LIMIT_EXCEEDED: 'plan_limit_exceeded',
+    CHARACTER_ICON_UNAVAILABLE: 'icon_unavailable',
+    CHARACTER_NOT_FOUND: 'not_found',
+    CHARACTER_PACK_REQUIRED: 'character_pack_required',
+    CHARACTER_SAFETY_REVIEW_REQUIRED: 'safety_review_required',
+    CHARACTER_SELECTION_LIMIT_EXCEEDED: 'plan_limit_exceeded',
+    CHARACTER_VALIDATION_ERROR: 'invalid_request',
   } as const satisfies Record<string, string>;
 
   return {
@@ -342,6 +400,59 @@ async function handleReminderRequest(
   }
 }
 
+async function handleCharacterRequest(
+  method: string,
+  pathname: string,
+  context: RouteContext,
+): Promise<RouteResult | undefined> {
+  const dependencies = context.dependencies ?? createApiDependencies();
+  const actor = resolveActor(context);
+  const plan = resolvePlan(context);
+  const now = resolveNow(context);
+
+  try {
+    if (pathname === '/v1/characters/custom' && method === 'POST') {
+      return {
+        statusCode: 201,
+        payload: {
+          character: (await resolveCustomCharacterService(dependencies).createCustomCharacter({
+            actor,
+            entitlement: createRouteEntitlement(actor, plan, now),
+            input: context.body,
+            now,
+          })) as JsonValue,
+        },
+      };
+    }
+
+    const match = /^\/v1\/characters\/custom\/([^/]+)$/.exec(pathname);
+
+    if (match === null) {
+      return undefined;
+    }
+
+    const characterId = match[1];
+
+    if (characterId === undefined || method !== 'PATCH') {
+      return undefined;
+    }
+
+    return {
+      statusCode: 200,
+      payload: {
+        character: (await resolveCustomCharacterService(dependencies).updateCustomCharacter({
+          actor,
+          id: characterId,
+          input: context.body,
+          now,
+        })) as JsonValue,
+      },
+    };
+  } catch (error) {
+    return mapCharacterError(error);
+  }
+}
+
 function resolveActor(context: RouteContext): Actor {
   if (context.actor !== undefined) {
     return context.actor;
@@ -400,6 +511,10 @@ function resolveSnoozeService(dependencies: ApiDependencies): SnoozeService {
   return dependencies.snoozes ?? createApiDependencies().snoozes!;
 }
 
+function resolveCustomCharacterService(dependencies: ApiDependencies): CustomCharacterService {
+  return dependencies.characters ?? createApiDependencies().characters!;
+}
+
 function headerValue(headers: IncomingHttpHeaders | undefined, name: string): string | undefined {
   const value = headers?.[name];
 
@@ -441,6 +556,22 @@ async function routeReminderRequest(
   }
 }
 
+async function routeCharacterRequest(
+  method: string,
+  pathname: string,
+  context: RouteContext,
+): Promise<RouteResult | undefined> {
+  if (pathname !== '/v1/characters/custom' && !pathname.startsWith('/v1/characters/custom/')) {
+    return undefined;
+  }
+
+  try {
+    return await handleCharacterRequest(method, pathname, context);
+  } catch (error) {
+    return mapCharacterError(error);
+  }
+}
+
 export async function routeRequest(
   method: string,
   requestUrl: string,
@@ -455,6 +586,12 @@ export async function routeRequest(
 
   if (reminderResult !== undefined) {
     return reminderResult;
+  }
+
+  const characterResult = await routeCharacterRequest(normalizedMethod, url.pathname, context);
+
+  if (characterResult !== undefined) {
+    return characterResult;
   }
 
   if (normalizedMethod === 'GET' && url.pathname === '/health') {

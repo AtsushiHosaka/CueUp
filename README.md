@@ -9,6 +9,8 @@ CueUp is an iOS/Android reminder app where backend-generated AI notification cop
 - `packages/shared`: shared domain constants and types
 - `docs`: architecture decisions, local development, and security notes
 
+See [Product Spec](spec.md) for the current product and visual design direction.
+
 ## Quick Start
 
 Prerequisites:

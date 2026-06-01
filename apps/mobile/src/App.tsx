@@ -1,5 +1,5 @@
 import { FREE_PLAN_LIMITS, type Character, type Reminder } from '@cueup/shared';
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -29,6 +29,7 @@ import {
   type ReminderFilter,
 } from './domain/mainFlow';
 import { sanitizeCustomCharacterText } from './domain/customCharacters';
+import { getPixelAvatarTheme, type PixelCharacter } from './domain/pixelCharacters';
 import { createReminderDraft, sanitizeReminderTitle } from './domain/reminders';
 import {
   appendChatExchange,
@@ -431,11 +432,15 @@ export default function App() {
         ) : null}
         {home.rows.map((row) => {
           const reminder = flow.reminders.find((item) => item.id === row.id);
+          const character = findCharacterById(flow.characters, reminder?.characterId);
 
           return (
             <View key={row.id} style={styles.reminderRow}>
               <View style={styles.rowHeader}>
-                <Text style={styles.rowTitle}>{row.title}</Text>
+                <View style={styles.reminderIdentity}>
+                  <PixelAvatar character={character} size="small" />
+                  <Text style={styles.rowTitle}>{row.title}</Text>
+                </View>
                 {row.badge !== undefined ? <Text style={styles.badge}>{row.badge}</Text> : null}
               </View>
               <Text style={styles.meta}>
@@ -551,9 +556,12 @@ export default function App() {
           }
         />
         <View style={styles.selectorRow}>
-          <View>
-            <Text style={styles.label}>キャラクター</Text>
-            <Text style={styles.value}>{reminderForm.selectedCharacterName}</Text>
+          <View style={styles.selectorIdentity}>
+            <PixelAvatar character={selectedCharacter} />
+            <View>
+              <Text style={styles.label}>キャラクター</Text>
+              <Text style={styles.value}>{reminderForm.selectedCharacterName}</Text>
+            </View>
           </View>
           <Button label="選択" compact onPress={() => goTo('characterSelect')} />
         </View>
@@ -575,41 +583,54 @@ export default function App() {
           </View>
           <Button label="作成" compact onPress={() => goTo('characterCreate')} />
         </View>
-        {characterRows.map((row) => (
-          <View key={row.id} style={styles.characterRow}>
-            <View>
-              <Text style={styles.rowTitle}>{row.name}</Text>
-              <Text style={styles.meta}>{row.detail}</Text>
-            </View>
-            <Button
-              label={row.actionLabel}
-              compact
-              variant={row.availability === 'available' ? 'secondary' : 'ghost'}
-              onPress={() => {
-                if (row.availability !== 'available') {
+        {characterRows.map((row) => {
+          const character = findCharacterById(flow.characters, row.id);
+
+          return (
+            <View key={row.id} style={styles.characterRow}>
+              <View style={styles.characterIdentity}>
+                <PixelAvatar character={character} selected={row.selected} />
+                <View style={styles.flexColumn}>
+                  <Text style={styles.rowTitle}>{row.name}</Text>
+                  <Text style={styles.meta}>{row.detail}</Text>
+                </View>
+              </View>
+              <Button
+                label={row.actionLabel}
+                compact
+                variant={row.availability === 'available' ? 'secondary' : 'ghost'}
+                onPress={() => {
+                  if (row.availability !== 'available') {
+                    updateFlow((current) => ({
+                      ...current,
+                      route: 'proUpsell',
+                      lastError: mapApiErrorToFlowError('plan_limit_exceeded'),
+                    }));
+                    return;
+                  }
+
                   updateFlow((current) => ({
                     ...current,
-                    route: 'proUpsell',
-                    lastError: mapApiErrorToFlowError('plan_limit_exceeded'),
+                    selectedCharacterId: row.id,
+                    route: 'reminderForm',
+                    lastError: undefined,
                   }));
-                  return;
-                }
-
-                updateFlow((current) => ({
-                  ...current,
-                  selectedCharacterId: row.id,
-                  route: 'reminderForm',
-                  lastError: undefined,
-                }));
-              }}
-            />
-          </View>
-        ))}
+                }}
+              />
+            </View>
+          );
+        })}
       </View>
     );
   }
 
   function renderCharacterCreate() {
+    const previewCharacter = createPixelCharacterFallback(
+      'custom-preview',
+      sanitizeCustomCharacterText(flow.customCharacterDraft.name) || 'Pixel Mate',
+      'custom',
+    );
+
     return (
       <View style={styles.stack}>
         <View style={styles.topBar}>
@@ -645,8 +666,13 @@ export default function App() {
           onChange={(warmth) => updateCharacterDraft({ warmth })}
         />
         <View style={styles.preview}>
-          <Text style={styles.label}>プレビュー</Text>
-          <Text style={styles.value}>{characterCreate.previewText}</Text>
+          <View style={styles.characterIdentity}>
+            <PixelAvatar character={previewCharacter} />
+            <View style={styles.flexColumn}>
+              <Text style={styles.label}>プレビュー</Text>
+              <Text style={styles.value}>{characterCreate.previewText}</Text>
+            </View>
+          </View>
           <Button
             label={characterCreate.previewStatus === 'generating' ? '反映' : '生成'}
             compact
@@ -706,7 +732,7 @@ export default function App() {
         {history.emptyMessage !== undefined ? (
           <View style={styles.emptyState}>
             <Text style={styles.title}>{history.emptyMessage}</Text>
-            <Text style={styles.body}>AI 通知が届くとここから再利用できます。</Text>
+            <Text style={styles.body}>Cue 通知が届くとここから再利用できます。</Text>
           </View>
         ) : null}
         {history.errorMessage !== undefined ? (
@@ -719,10 +745,17 @@ export default function App() {
             return null;
           }
 
+          const character =
+            findCharacterById(flow.characters, item.characterId) ??
+            createPixelCharacterFallback(item.characterId, item.characterName, 'built_in');
+
           return (
             <View key={row.id} style={styles.reminderRow}>
               <View style={styles.rowHeader}>
-                <Text style={styles.rowTitle}>{row.title}</Text>
+                <View style={styles.reminderIdentity}>
+                  <PixelAvatar character={character} size="small" />
+                  <Text style={styles.rowTitle}>{row.title}</Text>
+                </View>
                 <Text style={styles.badge}>{row.statusLabel}</Text>
               </View>
               <Text style={styles.meta}>{row.detail}</Text>
@@ -752,9 +785,12 @@ export default function App() {
     return (
       <View style={styles.stack}>
         <View style={styles.topBar}>
-          <View>
-            <Text style={styles.kicker}>Chat</Text>
-            <Text style={styles.title}>{chat.characterName}</Text>
+          <View style={styles.chatTitleRow}>
+            <PixelAvatar character={selectedCharacter} size="large" />
+            <View>
+              <Text style={styles.kicker}>Chat</Text>
+              <Text style={styles.title}>{chat.characterName}</Text>
+            </View>
           </View>
           <Text style={styles.badge}>{chat.remainingLabel}</Text>
         </View>
@@ -794,7 +830,7 @@ export default function App() {
           <Button label="送信" compact onPress={sendChatMessage} />
           <Button label="Cue 化" compact variant="secondary" onPress={createReminderFromChat} />
           <Button
-            label="AI失敗"
+            label="応答失敗"
             compact
             variant="ghost"
             onPress={() =>
@@ -891,25 +927,36 @@ export default function App() {
         {packStore.errorMessage !== undefined ? (
           <InlineError error={{ message: packStore.errorMessage }} />
         ) : null}
-        {packStore.rows.map((row) => (
-          <View key={row.id} style={styles.characterRow}>
-            <View style={styles.flexColumn}>
-              <Text style={styles.rowTitle}>{row.name}</Text>
-              <Text style={styles.meta}>{row.description}</Text>
-              <Text style={styles.badge}>{row.priceLabel}</Text>
+        {packStore.rows.map((row) => {
+          const packCharacterId = secondary.packs.find((pack) => pack.id === row.id)
+            ?.characterIds[0];
+          const character =
+            findCharacterById(flow.characters, packCharacterId) ??
+            createPixelCharacterFallback(packCharacterId ?? row.id, row.name, 'pack');
+
+          return (
+            <View key={row.id} style={styles.characterRow}>
+              <View style={styles.characterIdentity}>
+                <PixelAvatar character={character} />
+                <View style={styles.flexColumn}>
+                  <Text style={styles.rowTitle}>{row.name}</Text>
+                  <Text style={styles.meta}>{row.description}</Text>
+                  <Text style={styles.badge}>{row.priceLabel}</Text>
+                </View>
+              </View>
+              <Button
+                label={row.actionLabel}
+                compact
+                variant={row.available ? 'secondary' : 'primary'}
+                onPress={() =>
+                  updateSecondary((current) =>
+                    row.available ? current : markPackPurchased(current, row.id),
+                  )
+                }
+              />
             </View>
-            <Button
-              label={row.actionLabel}
-              compact
-              variant={row.available ? 'secondary' : 'primary'}
-              onPress={() =>
-                updateSecondary((current) =>
-                  row.available ? current : markPackPurchased(current, row.id),
-                )
-              }
-            />
-          </View>
-        ))}
+          );
+        })}
         <Button
           label="購入失敗を表示"
           variant="ghost"
@@ -1043,6 +1090,72 @@ export default function App() {
   );
 }
 
+const PixelAvatar = memo(function PixelAvatar({
+  character,
+  selected = false,
+  size = 'medium',
+}: {
+  character: PixelCharacter | undefined;
+  selected?: boolean;
+  size?: 'small' | 'medium' | 'large';
+}) {
+  const theme = getPixelAvatarTheme(character);
+  const pixelSize = size === 'large' ? 5 : size === 'small' ? 3 : 4;
+
+  return (
+    <View
+      accessibilityLabel={`${character?.name ?? 'Character'} pixel avatar`}
+      style={[
+        styles.pixelAvatar,
+        styles[`pixelAvatar_${size}`],
+        {
+          backgroundColor: theme.background,
+          borderColor: selected ? theme.accent : theme.border,
+          shadowColor: theme.shadow,
+        },
+      ]}
+    >
+      {theme.pixels.map((row, rowIndex) => (
+        <View key={`${row}-${rowIndex}`} style={styles.pixelRow}>
+          {Array.from(row).map((token, columnIndex) => (
+            <View
+              key={`${rowIndex}-${columnIndex}`}
+              style={[
+                styles.pixelCell,
+                {
+                  backgroundColor: theme.colors[token as keyof typeof theme.colors],
+                  height: pixelSize,
+                  width: pixelSize,
+                },
+              ]}
+            />
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+});
+
+function findCharacterById(characters: Character[], characterId: string | undefined) {
+  if (characterId === undefined) {
+    return undefined;
+  }
+
+  return characters.find((character) => character.id === characterId);
+}
+
+function createPixelCharacterFallback(
+  id: string,
+  name: string,
+  type: PixelCharacter['type'],
+): PixelCharacter {
+  return {
+    id,
+    name,
+    type,
+  };
+}
+
 function Button({
   label,
   onPress,
@@ -1169,18 +1282,18 @@ function InlineError({ error }: { error: { message: string; actionLabel?: string
 }
 
 const palette = {
-  background: '#F6F7F1',
+  background: '#F3F5F8',
   surface: '#FFFFFF',
-  ink: '#1F2421',
-  muted: '#59625D',
-  border: '#D7DBD2',
-  teal: '#23666A',
-  blue: '#2F5DA8',
-  coral: '#B94A48',
-  amber: '#9B6A17',
-  paleBlue: '#E9F0FA',
-  paleTeal: '#E7F3F1',
-  paleCoral: '#F8E9E7',
+  ink: '#181B24',
+  muted: '#596170',
+  border: '#C9D0DA',
+  teal: '#08746F',
+  blue: '#3657D4',
+  coral: '#D4514A',
+  amber: '#B46B00',
+  paleBlue: '#E8EEFF',
+  paleTeal: '#E4F7F3',
+  paleCoral: '#FFE7E1',
 };
 
 const styles = StyleSheet.create({
@@ -1206,6 +1319,7 @@ const styles = StyleSheet.create({
   topBar: {
     alignItems: 'center',
     flexDirection: 'row',
+    gap: 12,
     justifyContent: 'space-between',
   },
   kicker: {
@@ -1299,6 +1413,13 @@ const styles = StyleSheet.create({
     gap: 8,
     justifyContent: 'space-between',
   },
+  reminderIdentity: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 10,
+    minWidth: 0,
+  },
   rowTitle: {
     color: palette.ink,
     flex: 1,
@@ -1343,6 +1464,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 14,
   },
+  selectorIdentity: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 12,
+    minWidth: 0,
+  },
   characterRow: {
     alignItems: 'center',
     backgroundColor: palette.surface,
@@ -1354,9 +1482,55 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 14,
   },
+  characterIdentity: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 12,
+    minWidth: 0,
+  },
   flexColumn: {
     flex: 1,
     gap: 6,
+    minWidth: 0,
+  },
+  chatTitleRow: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 12,
+    minWidth: 0,
+  },
+  pixelAvatar: {
+    alignItems: 'center',
+    borderRadius: 5,
+    borderWidth: 2,
+    elevation: 2,
+    justifyContent: 'center',
+    shadowOffset: {
+      height: 3,
+      width: 3,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  pixelAvatar_small: {
+    height: 36,
+    width: 36,
+  },
+  pixelAvatar_medium: {
+    height: 48,
+    width: 48,
+  },
+  pixelAvatar_large: {
+    height: 58,
+    width: 58,
+  },
+  pixelRow: {
+    flexDirection: 'row',
+  },
+  pixelCell: {
+    borderRadius: 0,
   },
   chatBubble: {
     borderRadius: 8,

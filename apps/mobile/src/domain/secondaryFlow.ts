@@ -231,7 +231,7 @@ export function createChatScreenModel(
       })),
     ...(state.chatStatus === 'failed'
       ? {
-          errorMessage: 'AI 応答を取得できませんでした。',
+          errorMessage: '応答を取得できませんでした。',
         }
       : {}),
     canSend: state.chatInput.trim().length > 0 && state.chatStatus !== 'loading',

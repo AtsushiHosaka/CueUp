@@ -1,7 +1,9 @@
 import {
   FREE_PLAN_LIMITS,
+  PRO_PLAN_LIMITS,
   createEmptyUsageQuota,
   createEntitlementSnapshot,
+  type EntitlementSnapshot,
   type IsoDateTime,
   type Plan,
   type User,
@@ -15,6 +17,10 @@ import {
 import { randomUUID } from 'node:crypto';
 
 import { StaticAiTextProvider } from './ai/aiProvider.js';
+import { BillingServiceError } from './billing/billingErrors.js';
+import { InMemoryBillingRepository } from './billing/billingRepository.js';
+import { BillingService, type UsageKind } from './billing/billingService.js';
+import { RejectingBillingReceiptVerifier } from './billing/billingVerifier.js';
 import { ChatServiceError } from './chat/chatErrors.js';
 import { InMemoryChatMessageRepository } from './chat/chatRepository.js';
 import { ChatService, type SendChatMessageInput } from './chat/chatService.js';
@@ -63,6 +69,7 @@ type RouteContext = {
   plan?: Plan;
 };
 type ApiDependencies = {
+  billing?: BillingService;
   chat?: ChatService;
   characters?: CustomCharacterService;
   observability?: ObservabilityService;
@@ -96,20 +103,33 @@ function sendJson(response: ServerResponse, statusCode: number, payload: JsonVal
 
 export function createServer(
   config: RuntimeConfig = getRuntimeConfig(),
-  dependencies: ApiDependencies = createApiDependencies(),
+  dependencies?: ApiDependencies,
 ) {
+  const resolvedDependencies = dependencies ?? createApiDependencies(config);
+
   return createHttpServer((request: IncomingMessage, response: ServerResponse) => {
-    void handleRequest(request, response, config, dependencies);
+    void handleRequest(request, response, config, resolvedDependencies);
   });
 }
 
-export function createApiDependencies(): ApiDependencies {
+export function createApiDependencies(config: RuntimeConfig = getRuntimeConfig()): ApiDependencies {
+  const billingRepository = new InMemoryBillingRepository();
   const characters = new InMemoryCharacterRepository();
   const reminders = new InMemoryReminderRepository();
   const notificationJobs = new InMemoryNotificationJobRepository();
   const quotas = new InMemoryUsageQuotaRepository();
+  const billing =
+    config.billingProducts.length === 0
+      ? undefined
+      : new BillingService(
+          billingRepository,
+          new RejectingBillingReceiptVerifier(),
+          randomUUID,
+          config.billingProducts,
+        );
 
   return {
+    ...(billing === undefined ? {} : { billing }),
     chat: new ChatService(
       new CharacterCatalogService(characters, reminders),
       new InMemoryChatMessageRepository(),
@@ -402,6 +422,50 @@ function mapChatError(error: unknown): RouteResult {
   };
 }
 
+function mapBillingError(error: unknown): RouteResult {
+  if (error instanceof AuthenticationRequiredError) {
+    return {
+      statusCode: 401,
+      payload: {
+        error: 'authentication_required',
+        message: 'x-user-id header is required',
+      },
+    };
+  }
+
+  if (!(error instanceof BillingServiceError)) {
+    return {
+      statusCode: 500,
+      payload: {
+        error: 'internal_error',
+        message: 'Unexpected server error',
+      },
+    };
+  }
+
+  const statusCodeByError = {
+    BILLING_PRODUCT_NOT_CONFIGURED: 400,
+    BILLING_USAGE_LIMIT_EXCEEDED: 402,
+    BILLING_VALIDATION_ERROR: 400,
+    BILLING_VERIFICATION_FAILED: 402,
+  } as const satisfies Record<string, number>;
+  const apiErrorByCode = {
+    BILLING_PRODUCT_NOT_CONFIGURED: 'product_not_configured',
+    BILLING_USAGE_LIMIT_EXCEEDED: 'plan_limit_exceeded',
+    BILLING_VALIDATION_ERROR: 'invalid_request',
+    BILLING_VERIFICATION_FAILED: 'billing_verification_failed',
+  } as const satisfies Record<string, string>;
+
+  return {
+    statusCode: statusCodeByError[error.code],
+    payload: {
+      error: apiErrorByCode[error.code],
+      message: error.message,
+      details: error.details as JsonValue,
+    },
+  };
+}
+
 async function handleReminderRequest(
   method: string,
   pathname: string,
@@ -428,7 +492,7 @@ async function handleReminderRequest(
         payload: {
           reminder: (await dependencies.reminders.createReminder({
             actor,
-            entitlement: createRouteEntitlement(actor, plan, now),
+            entitlement: await resolveRouteEntitlement(dependencies, actor, plan, now),
             input: requireObjectBody(context.body) as CreateReminderInput,
             now,
           })) as JsonValue,
@@ -547,7 +611,7 @@ async function handleCharacterRequest(
         payload: {
           character: (await resolveCustomCharacterService(dependencies).createCustomCharacter({
             actor,
-            entitlement: createRouteEntitlement(actor, plan, now),
+            entitlement: await resolveRouteEntitlement(dependencies, actor, plan, now),
             input: context.body,
             now,
           })) as JsonValue,
@@ -612,7 +676,38 @@ function resolveNow(context: RouteContext): IsoDateTime {
   return context.now ?? new Date().toISOString();
 }
 
-function createRouteEntitlement(actor: Actor, plan: Plan, now: IsoDateTime) {
+function createRouteUser(actor: Actor, plan: Plan, now: IsoDateTime): User {
+  return {
+    id: actor.userId,
+    provider: 'email',
+    locale: 'en',
+    timezone: 'UTC',
+    plan,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+async function resolveRouteEntitlement(
+  dependencies: ApiDependencies,
+  actor: Actor,
+  plan: Plan,
+  now: IsoDateTime,
+): Promise<EntitlementSnapshot> {
+  const user = createRouteUser(actor, plan, now);
+
+  if (dependencies.billing !== undefined) {
+    return dependencies.billing.getEntitlementSnapshot({
+      actor,
+      user,
+      now: new Date(now),
+    });
+  }
+
+  return createHeaderEntitlement(actor, plan, now);
+}
+
+function createHeaderEntitlement(actor: Actor, plan: Plan, now: IsoDateTime): EntitlementSnapshot {
   const user = createRouteUser(actor, plan, now);
 
   return createEntitlementSnapshot({
@@ -627,18 +722,6 @@ function createRouteEntitlement(actor: Actor, plan: Plan, now: IsoDateTime) {
     }),
     now: new Date(now),
   });
-}
-
-function createRouteUser(actor: Actor, plan: Plan, now: IsoDateTime): User {
-  return {
-    id: actor.userId,
-    provider: 'email',
-    locale: 'en',
-    timezone: 'UTC',
-    plan,
-    createdAt: now,
-    updatedAt: now,
-  };
 }
 
 function resolveSnoozeService(dependencies: ApiDependencies): SnoozeService {
@@ -667,6 +750,14 @@ function resolveChatService(dependencies: ApiDependencies): ChatService {
   }
 
   return dependencies.chat;
+}
+
+function resolveBillingService(dependencies: ApiDependencies): BillingService {
+  if (dependencies.billing === undefined) {
+    throw new BillingServiceError('BILLING_VALIDATION_ERROR', 'Billing is not configured');
+  }
+
+  return dependencies.billing;
 }
 
 function headerValue(headers: IncomingHttpHeaders | undefined, name: string): string | undefined {
@@ -713,6 +804,14 @@ function requireChatObjectBody(body: unknown): Record<string, unknown> {
   return body;
 }
 
+function requireBillingObjectBody(body: unknown): Record<string, unknown> {
+  if (!isRecord(body)) {
+    throw new BillingServiceError('BILLING_VALIDATION_ERROR', 'Request body must be a JSON object');
+  }
+
+  return body;
+}
+
 function requireTagIdsBody(body: unknown): string[] {
   const objectBody = requireOrganizerObjectBody(body);
   const tagIds = objectBody.tagIds;
@@ -728,6 +827,107 @@ function requireTagIdsBody(body: unknown): string[] {
   }
 
   return tagIds;
+}
+
+async function routeBillingRequest(
+  method: string,
+  pathname: string,
+  context: RouteContext,
+): Promise<RouteResult | undefined> {
+  if (pathname !== '/v1/billing/products' && !pathname.startsWith('/v1/billing/')) {
+    return undefined;
+  }
+
+  const dependencies = context.dependencies ?? createApiDependencies();
+
+  try {
+    const billing = resolveBillingService(dependencies);
+
+    if (pathname === '/v1/billing/products' && method === 'GET') {
+      return {
+        statusCode: 200,
+        payload: {
+          products: billing.listProducts() as JsonValue,
+        },
+      };
+    }
+
+    const actor = resolveActor(context);
+    const plan = resolvePlan(context);
+    const now = resolveNow(context);
+    const user = createRouteUser(actor, plan, now);
+
+    if (pathname === '/v1/billing/entitlements' && method === 'GET') {
+      return {
+        statusCode: 200,
+        payload: {
+          entitlement: (await billing.getEntitlementSnapshot({
+            actor,
+            user,
+            now: new Date(now),
+          })) as JsonValue,
+        },
+      };
+    }
+
+    if (pathname === '/v1/billing/verify' && method === 'POST') {
+      const result = await billing.verifyPurchase({
+        actor,
+        input: requireBillingObjectBody(context.body),
+        now: new Date(now),
+        user,
+      });
+
+      return {
+        statusCode: 200,
+        payload: {
+          entitlement: result.entitlement as JsonValue,
+          purchase: (result.purchase ?? null) as JsonValue,
+          subscription: (result.subscription ?? null) as JsonValue,
+        },
+      };
+    }
+
+    if (pathname === '/v1/billing/restore' && method === 'POST') {
+      const result = await billing.restorePurchases({
+        actor,
+        input: requireBillingObjectBody(context.body),
+        now: new Date(now),
+        user,
+      });
+
+      return {
+        statusCode: 200,
+        payload: {
+          entitlement: result.entitlement as JsonValue,
+          results: result.results as JsonValue,
+        },
+      };
+    }
+
+    if (pathname === '/v1/billing/usage' && method === 'POST') {
+      const body = requireBillingObjectBody(context.body);
+      const kind = parseUsageKind(body.kind);
+      const result = await billing.consumeUsage({
+        actor,
+        kind,
+        now: new Date(now),
+        user,
+      });
+
+      return {
+        statusCode: 200,
+        payload: {
+          entitlement: result.entitlement as JsonValue,
+          quota: result.quota as JsonValue,
+        },
+      };
+    }
+
+    return undefined;
+  } catch (error) {
+    return mapBillingError(error);
+  }
 }
 
 async function routeReminderRequest(
@@ -771,7 +971,7 @@ async function routeChatRequest(
     actor = resolveActor(context);
     const plan = resolvePlan(context);
     now = resolveNow(context);
-    const entitlement = createRouteEntitlement(actor, plan, now);
+    const entitlement = await resolveRouteEntitlement(dependencies, actor, plan, now);
     const chat = resolveChatService(dependencies);
 
     if (method === 'GET') {
@@ -893,7 +1093,7 @@ async function routeOrganizerRequest(
         payload: {
           folder: (await organizer.createFolder({
             actor,
-            entitlement: createRouteEntitlement(actor, plan, now),
+            entitlement: await resolveRouteEntitlement(dependencies, actor, plan, now),
             input: requireOrganizerObjectBody(context.body) as CreateFolderInput,
             now,
           })) as JsonValue,
@@ -922,7 +1122,7 @@ async function routeOrganizerRequest(
         payload: {
           tag: (await organizer.createTag({
             actor,
-            entitlement: createRouteEntitlement(actor, plan, now),
+            entitlement: await resolveRouteEntitlement(dependencies, actor, plan, now),
             input: requireOrganizerObjectBody(context.body) as CreateTagInput,
             now,
           })) as JsonValue,
@@ -1129,6 +1329,16 @@ function parseSmartListKind(value: string | undefined): SmartListKind {
   });
 }
 
+function parseUsageKind(value: unknown): UsageKind {
+  if (value === 'ai_notification' || value === 'chat_message') {
+    return value;
+  }
+
+  throw new BillingServiceError('BILLING_VALIDATION_ERROR', 'Unsupported usage kind', {
+    field: 'kind',
+  });
+}
+
 export async function routeRequest(
   method: string,
   requestUrl: string,
@@ -1138,26 +1348,39 @@ export async function routeRequest(
 ): Promise<RouteResult> {
   const normalizedMethod = method.toUpperCase();
   const url = new URL(requestUrl, `http://${host}`);
+  const routeContext =
+    context.dependencies === undefined
+      ? {
+          ...context,
+          dependencies: createApiDependencies(config),
+        }
+      : context;
 
-  const chatResult = await routeChatRequest(normalizedMethod, url.pathname, context);
+  const billingResult = await routeBillingRequest(normalizedMethod, url.pathname, routeContext);
+
+  if (billingResult !== undefined) {
+    return billingResult;
+  }
+
+  const chatResult = await routeChatRequest(normalizedMethod, url.pathname, routeContext);
 
   if (chatResult !== undefined) {
     return chatResult;
   }
 
-  const organizerResult = await routeOrganizerRequest(normalizedMethod, url, context);
+  const organizerResult = await routeOrganizerRequest(normalizedMethod, url, routeContext);
 
   if (organizerResult !== undefined) {
     return organizerResult;
   }
 
-  const reminderResult = await routeReminderRequest(normalizedMethod, url.pathname, context);
+  const reminderResult = await routeReminderRequest(normalizedMethod, url.pathname, routeContext);
 
   if (reminderResult !== undefined) {
     return reminderResult;
   }
 
-  const characterResult = await routeCharacterRequest(normalizedMethod, url.pathname, context);
+  const characterResult = await routeCharacterRequest(normalizedMethod, url.pathname, routeContext);
 
   if (characterResult !== undefined) {
     return characterResult;
@@ -1192,7 +1415,9 @@ export async function routeRequest(
         app: 'CueUp',
         planLimits: {
           free: FREE_PLAN_LIMITS,
+          pro: PRO_PLAN_LIMITS,
         },
+        billingProducts: config.billingProducts as JsonValue,
       },
     };
   }

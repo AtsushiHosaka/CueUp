@@ -69,28 +69,37 @@ export class SnoozeService {
     }
 
     const snoozedUntil = getSnoozedUntil(params.input.durationMinutes, params.now);
-    const notificationJob = await this.jobs.scheduleSnoozeJob({
-      userId: existing.userId,
-      reminderId: existing.id,
-      scheduledFor: snoozedUntil,
-      now: params.now,
-    });
-    let reminder: Reminder;
+    const reminder = await this.writeRepository(() =>
+      this.reminders.save({
+        ...existing,
+        status: 'snoozed',
+        scheduledAt: snoozedUntil,
+        snoozedUntil,
+        snoozeCount: snoozeCount + 1,
+        updatedAt: params.now,
+      }),
+    );
+    let notificationJob: NotificationJob;
 
     try {
-      reminder = await this.writeRepository(() =>
-        this.reminders.save({
-          ...existing,
-          status: 'snoozed',
-          scheduledAt: snoozedUntil,
-          snoozedUntil,
-          snoozeCount: snoozeCount + 1,
-          updatedAt: params.now,
-        }),
-      );
+      notificationJob = await this.jobs.scheduleSnoozeJob({
+        userId: reminder.userId,
+        reminderId: reminder.id,
+        scheduledFor: snoozedUntil,
+        now: params.now,
+      });
     } catch (error) {
-      await this.jobs.cancelJob(notificationJob, params.now);
-      throw error;
+      try {
+        await this.writeRepository(() => this.reminders.save(existing));
+      } catch {
+        // Keep the original scheduling failure visible to the caller.
+      }
+
+      if (error instanceof ReminderServiceError) {
+        throw error;
+      }
+
+      throw persistenceUnavailable();
     }
 
     if (params.input.generateMessage !== true || this.messageGenerator === undefined) {

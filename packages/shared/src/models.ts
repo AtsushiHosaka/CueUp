@@ -43,6 +43,7 @@ export type Reminder = Timestamped &
     recurrenceRule?: JsonObject | null;
     characterId: UUID;
     folderId?: UUID | null;
+    tagIds?: UUID[];
     status: ReminderStatus;
     completedAt?: IsoDateTime | null;
   };

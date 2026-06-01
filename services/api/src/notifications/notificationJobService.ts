@@ -51,4 +51,12 @@ export class NotificationJobService {
       updatedAt: params.now,
     });
   }
+
+  async cancelJob(job: NotificationJob, now: IsoDateTime): Promise<NotificationJob> {
+    return this.repository.save({
+      ...job,
+      status: 'canceled',
+      updatedAt: now,
+    });
+  }
 }

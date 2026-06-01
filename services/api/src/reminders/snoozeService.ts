@@ -79,12 +79,28 @@ export class SnoozeService {
         updatedAt: params.now,
       }),
     );
-    const notificationJob = await this.jobs.scheduleSnoozeJob({
-      userId: reminder.userId,
-      reminderId: reminder.id,
-      scheduledFor: snoozedUntil,
-      now: params.now,
-    });
+    let notificationJob: NotificationJob;
+
+    try {
+      notificationJob = await this.jobs.scheduleSnoozeJob({
+        userId: reminder.userId,
+        reminderId: reminder.id,
+        scheduledFor: snoozedUntil,
+        now: params.now,
+      });
+    } catch (error) {
+      try {
+        await this.writeRepository(() => this.reminders.save(existing));
+      } catch {
+        // Keep the original scheduling failure visible to the caller.
+      }
+
+      if (error instanceof ReminderServiceError) {
+        throw error;
+      }
+
+      throw persistenceUnavailable();
+    }
 
     if (params.input.generateMessage !== true || this.messageGenerator === undefined) {
       return { reminder, notificationJob };

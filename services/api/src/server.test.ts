@@ -207,6 +207,30 @@ test('POST /v1/reminders/:id/snooze returns snoozed reminder and scheduled job',
   assert.equal(body.notificationJob.status, 'scheduled');
 });
 
+test('POST /v1/reminders/:id/snooze fails fast when snooze dependencies are missing', async () => {
+  const dependencies = {
+    reminders: new ReminderService(new InMemoryReminderRepository(), () => 'generated-1'),
+  };
+  const response = await routeRequest(
+    'POST',
+    '/v1/reminders/reminder-1/snooze',
+    'localhost',
+    testConfig,
+    {
+      actor: { userId: 'alice', role: 'user' },
+      body: {
+        durationMinutes: 10,
+      },
+      dependencies,
+      now: '2026-06-01T09:00:00.000Z',
+    },
+  );
+  const body = response.payload as { error: string };
+
+  assert.equal(response.statusCode, 500);
+  assert.equal(body.error, 'internal_error');
+});
+
 test('POST /v1/characters/custom creates an owner-scoped custom character', async () => {
   const dependencies = {
     reminders: new ReminderService(new InMemoryReminderRepository(), () => 'reminder-1'),

@@ -508,7 +508,11 @@ function createRouteEntitlement(actor: Actor, plan: Plan, now: IsoDateTime) {
 }
 
 function resolveSnoozeService(dependencies: ApiDependencies): SnoozeService {
-  return dependencies.snoozes ?? createApiDependencies().snoozes!;
+  if (dependencies.snoozes === undefined) {
+    throw new Error('Snooze dependencies are not configured');
+  }
+
+  return dependencies.snoozes;
 }
 
 function resolveCustomCharacterService(dependencies: ApiDependencies): CustomCharacterService {

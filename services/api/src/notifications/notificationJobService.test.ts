@@ -74,3 +74,12 @@ test('recordFailure schedules retries until max attempts then stores a failure',
   assert.equal(failed.attempts, 2);
   assert.equal(failed.lastError, 'push provider unavailable');
 });
+
+test('cancelJob removes the job from the active reminder lookup', async () => {
+  const repository = new InMemoryNotificationJobRepository([createJob()]);
+  const service = new NotificationJobService(repository, () => 'new');
+  const canceled = await service.cancelJob(createJob(), '2026-06-01T09:05:00.000Z');
+
+  assert.equal(canceled.status, 'canceled');
+  assert.equal(await repository.findActiveByReminderId('reminder-1'), undefined);
+});

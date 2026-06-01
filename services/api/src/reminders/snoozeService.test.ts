@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import type { NotificationMessage, Reminder, UsageQuota } from '@cueup/shared';
+import type { NotificationJob, NotificationMessage, Reminder, UsageQuota } from '@cueup/shared';
 
 import type { Actor } from '../data/accessControl.js';
 import { InMemoryNotificationJobRepository } from '../notifications/notificationJobRepository.js';
 import { NotificationJobService } from '../notifications/notificationJobService.js';
 import { ReminderServiceError } from './reminderErrors.js';
-import { InMemoryReminderRepository } from './reminderRepository.js';
+import { InMemoryReminderRepository, type ReminderRepository } from './reminderRepository.js';
 import { SnoozeService, type SnoozeMessageGenerator } from './snoozeService.js';
 
 const now = '2026-06-01T09:00:00.000Z';
@@ -162,4 +162,62 @@ test('snoozeReminder invokes AI generation hook only when requested', async () =
   assert.equal(skipped.message, undefined);
   assert.equal(generated.message?.id, 'message-1');
   assert.equal(generated.quota?.aiNotificationCount, 1);
+});
+
+test('snoozeReminder does not schedule a job when reminder persistence fails', async () => {
+  const notificationJobs = new InMemoryNotificationJobRepository();
+  const failingReminderRepository: ReminderRepository = {
+    async findById() {
+      return createReminder();
+    },
+    async listByUser() {
+      return [createReminder()];
+    },
+    async save() {
+      throw new Error('database unavailable');
+    },
+  };
+  const service = new SnoozeService(
+    failingReminderRepository,
+    new NotificationJobService(notificationJobs, () => 'job-1'),
+  );
+
+  await assert.rejects(
+    () =>
+      service.snoozeReminder({
+        actor: alice,
+        id: 'reminder-1',
+        input: { durationMinutes: 5 },
+        now,
+      }),
+    (error) => assertReminderError(error, 'REMINDER_PERSISTENCE_UNAVAILABLE'),
+  );
+  assert.equal(await notificationJobs.findActiveByReminderId('reminder-1'), undefined);
+});
+
+test('snoozeReminder restores the reminder when job scheduling fails', async () => {
+  class FailingNotificationJobService extends NotificationJobService {
+    async scheduleSnoozeJob(): Promise<NotificationJob> {
+      throw new Error('queue unavailable');
+    }
+  }
+
+  const reminderRepository = new InMemoryReminderRepository([createReminder()]);
+  const service = new SnoozeService(
+    reminderRepository,
+    new FailingNotificationJobService(new InMemoryNotificationJobRepository(), () => 'job-1'),
+  );
+
+  await assert.rejects(
+    () =>
+      service.snoozeReminder({
+        actor: alice,
+        id: 'reminder-1',
+        input: { durationMinutes: 5 },
+        now,
+      }),
+    (error) => assertReminderError(error, 'REMINDER_PERSISTENCE_UNAVAILABLE'),
+  );
+
+  assert.deepEqual(await reminderRepository.findById('reminder-1'), createReminder());
 });

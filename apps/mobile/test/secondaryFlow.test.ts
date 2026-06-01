@@ -44,7 +44,7 @@ test('history model supports loading, empty, reuse, delete, and chat affordances
   assert.equal(ready.rows[1]?.statusLabel, 'Fallback');
 });
 
-test('chat model shows first greeting, remaining quota, and response failure', () => {
+test('chat model shows first greeting, remaining quota, and AI failure handling copy', () => {
   const empty = createChatScreenModel(createSecondaryFlowState(now), character);
   const failed = createChatScreenModel(
     {

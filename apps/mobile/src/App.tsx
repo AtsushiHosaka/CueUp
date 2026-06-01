@@ -45,30 +45,31 @@ import {
   type SecondaryFlowState,
   type SettingsDestination,
 } from './domain/secondaryFlow';
-import { getUiText } from './i18n/uiText';
+import { getUiText, supportedLocales, type SupportedLocale } from './i18n/uiText';
 
 const fixedNow = new Date('2026-06-01T00:00:00.000Z');
 
 export default function App() {
   const now = useMemo(() => fixedNow, []);
-  const copy = useMemo(() => getUiText('ja'), []);
-  const [flow, setFlow] = useState<MainFlowState>(() => createInitialMainFlowState(now));
+  const [locale, setLocale] = useState<SupportedLocale>('ja');
+  const copy = useMemo(() => getUiText(locale), [locale]);
+  const [flow, setFlow] = useState<MainFlowState>(() => createInitialMainFlowState(now, copy));
   const [secondary, setSecondary] = useState<SecondaryFlowState>(() =>
-    createSecondaryFlowState(now.toISOString()),
+    createSecondaryFlowState(now.toISOString(), copy),
   );
-  const home = createHomeScreenModel(flow, now);
-  const onboarding = createOnboardingScreenModel(flow);
-  const reminderForm = createReminderFormModel(flow);
-  const characterCreate = createCharacterCreateModel(flow);
-  const characterRows = createCharacterSelectRows(flow);
+  const home = createHomeScreenModel(flow, now, copy);
+  const onboarding = createOnboardingScreenModel(flow, copy);
+  const reminderForm = createReminderFormModel(flow, copy);
+  const characterCreate = createCharacterCreateModel(flow, copy);
+  const characterRows = createCharacterSelectRows(flow, copy);
   const selectedCharacter = flow.characters.find(
     (character) => character.id === flow.selectedCharacterId,
   );
-  const history = createHistoryScreenModel(secondary);
-  const chat = createChatScreenModel(secondary, selectedCharacter);
-  const pro = createProScreenModel(secondary);
-  const packStore = createPackStoreScreenModel(secondary);
-  const settings = createSettingsScreenModel(secondary);
+  const history = createHistoryScreenModel(secondary, copy);
+  const chat = createChatScreenModel(secondary, selectedCharacter, copy);
+  const pro = createProScreenModel(secondary, copy);
+  const packStore = createPackStoreScreenModel(secondary, copy);
+  const settings = createSettingsScreenModel(secondary, copy);
 
   function updateFlow(updater: (current: MainFlowState) => MainFlowState) {
     setFlow((current) => updater(current));
@@ -100,7 +101,7 @@ export default function App() {
   function loadDemoReminders() {
     updateFlow((current) => ({
       ...current,
-      reminders: createDemoReminders(now.toISOString()),
+      reminders: createDemoReminders(now.toISOString(), copy),
       reminderFilter: 'all',
       reminderListStatus: 'idle',
       lastError: undefined,
@@ -111,7 +112,7 @@ export default function App() {
     updateFlow((current) => ({
       ...current,
       route: 'reminderForm',
-      reminderDraft: createReminderDraft(now),
+      reminderDraft: createReminderDraft(now, copy.demo.defaultReminderTitle),
       editingReminderId: undefined,
       reminderSavingStatus: 'idle',
       lastError: undefined,
@@ -135,7 +136,7 @@ export default function App() {
   }
 
   function saveReminder() {
-    const validationError = validateReminderDraft(flow);
+    const validationError = validateReminderDraft(flow, copy);
 
     if (validationError !== undefined) {
       updateFlow((current) => ({
@@ -242,7 +243,7 @@ export default function App() {
       reminderDraft: {
         title: item.body.slice(0, 40),
         note: item.body,
-        scheduledAt: createReminderDraft(now).scheduledAt,
+        scheduledAt: createReminderDraft(now, copy.demo.defaultReminderTitle).scheduledAt,
       },
       selectedCharacterId: item.characterId,
       editingReminderId: undefined,
@@ -271,7 +272,7 @@ export default function App() {
       updateFlow((current) => ({
         ...current,
         route: 'proUpsell',
-        lastError: mapApiErrorToFlowError('plan_limit_exceeded'),
+        lastError: mapApiErrorToFlowError('plan_limit_exceeded', copy),
       }));
       return;
     }
@@ -285,12 +286,16 @@ export default function App() {
     }
 
     updateSecondary((current) =>
-      appendChatExchange(current, {
-        characterId: flow.selectedCharacterId,
-        userId: 'user-1',
-        body: current.chatInput,
-        now: now.toISOString(),
-      }),
+      appendChatExchange(
+        current,
+        {
+          characterId: flow.selectedCharacterId,
+          userId: 'user-1',
+          body: current.chatInput,
+          now: now.toISOString(),
+        },
+        copy,
+      ),
     );
   }
 
@@ -303,9 +308,9 @@ export default function App() {
       ...current,
       route: 'reminderForm',
       reminderDraft: {
-        title: latestUserMessage?.body.slice(0, 40) ?? 'チャットから Cue',
+        title: latestUserMessage?.body.slice(0, 40) ?? copy.chat.reminderFallbackTitle,
         note: latestUserMessage?.body ?? '',
-        scheduledAt: createReminderDraft(now).scheduledAt,
+        scheduledAt: createReminderDraft(now, copy.demo.defaultReminderTitle).scheduledAt,
       },
       editingReminderId: undefined,
       lastError: undefined,
@@ -313,6 +318,15 @@ export default function App() {
   }
 
   function selectSetting(destination: SettingsDestination) {
+    if (destination === 'language') {
+      setLocale((current) => supportedLocales.find((item) => item !== current) ?? 'ja');
+      updateSecondary((current) => ({
+        ...current,
+        settingsSelection: destination,
+      }));
+      return;
+    }
+
     if (destination === 'logout') {
       updateFlow((current) => ({
         ...current,
@@ -339,7 +353,7 @@ export default function App() {
         <View style={styles.heroBand}>
           <Text style={styles.kicker}>CueUp</Text>
           <Text style={styles.heroTitle}>{onboarding.title}</Text>
-          <Text style={styles.body}>キャラクターの声で、忘れたくない行動を短く受け取れます。</Text>
+          <Text style={styles.body}>{copy.onboarding.body}</Text>
         </View>
         {onboarding.permissionNotice !== undefined ? (
           <View style={styles.notice}>
@@ -373,7 +387,11 @@ export default function App() {
           }
         />
         {flow.notificationPermission !== 'unknown' ? (
-          <Button label="ログインして続行" variant="ghost" onPress={startSignedInHome} />
+          <Button
+            label={copy.onboarding.loginContinue}
+            variant="ghost"
+            onPress={startSignedInHome}
+          />
         ) : null}
       </View>
     );
@@ -384,10 +402,10 @@ export default function App() {
       <View style={styles.stack}>
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.kicker}>Home</Text>
-            <Text style={styles.title}>今日の Cue</Text>
+            <Text style={styles.kicker}>{copy.home.kicker}</Text>
+            <Text style={styles.title}>{copy.home.title}</Text>
           </View>
-          <Button label="新規" compact onPress={openCreateReminder} />
+          <Button label={copy.home.newReminder} compact onPress={openCreateReminder} />
         </View>
         {home.notificationBanner !== undefined ? (
           <View style={styles.notice}>
@@ -397,13 +415,17 @@ export default function App() {
         ) : null}
         <View style={styles.segmented}>
           <Segment
-            label="今日"
+            label={copy.home.filters.today}
             active={home.filter === 'today'}
             onPress={() => setFilter('today')}
           />
-          <Segment label="すべて" active={home.filter === 'all'} onPress={() => setFilter('all')} />
           <Segment
-            label="スヌーズ"
+            label={copy.home.filters.all}
+            active={home.filter === 'all'}
+            onPress={() => setFilter('all')}
+          />
+          <Segment
+            label={copy.home.filters.snoozed}
             active={home.filter === 'snoozed'}
             onPress={() => setFilter('snoozed')}
           />
@@ -422,7 +444,7 @@ export default function App() {
             <View style={styles.inlineActions}>
               <Button label={home.emptyState.actionLabel} compact onPress={openCreateReminder} />
               <Button
-                label="サンプル同期"
+                label={copy.home.sampleSync}
                 compact
                 variant="secondary"
                 onPress={loadDemoReminders}
@@ -448,7 +470,7 @@ export default function App() {
               </Text>
               <View style={styles.inlineActions}>
                 <Button
-                  label="完了"
+                  label={copy.home.complete}
                   compact
                   onPress={() =>
                     updateFlow((current) => ({
@@ -458,7 +480,7 @@ export default function App() {
                   }
                 />
                 <Button
-                  label="10分後"
+                  label={copy.home.snoozeTenMinutes}
                   compact
                   variant="secondary"
                   onPress={() =>
@@ -474,14 +496,14 @@ export default function App() {
                 />
                 {reminder !== undefined ? (
                   <Button
-                    label="編集"
+                    label={copy.common.edit}
                     compact
                     variant="ghost"
                     onPress={() => openEditReminder(reminder)}
                   />
                 ) : null}
                 <Button
-                  label="削除"
+                  label={copy.common.delete}
                   compact
                   variant="danger"
                   onPress={() =>
@@ -497,7 +519,9 @@ export default function App() {
         })}
         <View style={styles.statusStrip}>
           <Text style={styles.meta}>API {clientConfig.apiBaseUrl}</Text>
-          <Text style={styles.meta}>Free {FREE_PLAN_LIMITS.activeReminders} Cue</Text>
+          <Text style={styles.meta}>
+            {copy.home.freeCueLimit(FREE_PLAN_LIMITS.activeReminders)}
+          </Text>
         </View>
       </View>
     );
@@ -509,14 +533,16 @@ export default function App() {
         <View style={styles.topBar}>
           <View>
             <Text style={styles.kicker}>
-              {reminderForm.mode === 'create' ? 'New Cue' : 'Edit Cue'}
+              {reminderForm.mode === 'create'
+                ? copy.reminderForm.createKicker
+                : copy.reminderForm.editKicker}
             </Text>
-            <Text style={styles.title}>Cue を設定</Text>
+            <Text style={styles.title}>{copy.reminderForm.title}</Text>
           </View>
-          <Button label="戻る" compact variant="ghost" onPress={() => goTo('home')} />
+          <Button label={copy.common.back} compact variant="ghost" onPress={() => goTo('home')} />
         </View>
         <Field
-          label="タイトル"
+          label={copy.reminderForm.titleLabel}
           value={flow.reminderDraft.title}
           onChangeText={(title) =>
             updateFlow((current) => ({
@@ -529,7 +555,7 @@ export default function App() {
           }
         />
         <Field
-          label="メモ"
+          label={copy.reminderForm.noteLabel}
           value={flow.reminderDraft.note}
           multiline
           onChangeText={(note) =>
@@ -543,7 +569,7 @@ export default function App() {
           }
         />
         <Field
-          label="通知時刻"
+          label={copy.reminderForm.scheduledAtLabel}
           value={flow.reminderDraft.scheduledAt}
           onChangeText={(scheduledAt) =>
             updateFlow((current) => ({
@@ -559,11 +585,11 @@ export default function App() {
           <View style={styles.selectorIdentity}>
             <PixelAvatar character={selectedCharacter} />
             <View>
-              <Text style={styles.label}>キャラクター</Text>
+              <Text style={styles.label}>{copy.reminderForm.characterLabel}</Text>
               <Text style={styles.value}>{reminderForm.selectedCharacterName}</Text>
             </View>
           </View>
-          <Button label="選択" compact onPress={() => goTo('characterSelect')} />
+          <Button label={copy.common.select} compact onPress={() => goTo('characterSelect')} />
         </View>
         {reminderForm.validationError !== undefined ? (
           <InlineError error={reminderForm.validationError} />
@@ -578,10 +604,10 @@ export default function App() {
       <View style={styles.stack}>
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.kicker}>Character</Text>
-            <Text style={styles.title}>声を選ぶ</Text>
+            <Text style={styles.kicker}>{copy.character.selectKicker}</Text>
+            <Text style={styles.title}>{copy.character.selectTitle}</Text>
           </View>
-          <Button label="作成" compact onPress={() => goTo('characterCreate')} />
+          <Button label={copy.common.create} compact onPress={() => goTo('characterCreate')} />
         </View>
         {characterRows.map((row) => {
           const character = findCharacterById(flow.characters, row.id);
@@ -604,7 +630,7 @@ export default function App() {
                     updateFlow((current) => ({
                       ...current,
                       route: 'proUpsell',
-                      lastError: mapApiErrorToFlowError('plan_limit_exceeded'),
+                      lastError: mapApiErrorToFlowError('plan_limit_exceeded', copy),
                     }));
                     return;
                   }
@@ -635,33 +661,38 @@ export default function App() {
       <View style={styles.stack}>
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.kicker}>Custom</Text>
-            <Text style={styles.title}>キャラクター作成</Text>
+            <Text style={styles.kicker}>{copy.character.createKicker}</Text>
+            <Text style={styles.title}>{copy.character.createTitle}</Text>
           </View>
-          <Button label="戻る" compact variant="ghost" onPress={() => goTo('characterSelect')} />
+          <Button
+            label={copy.common.back}
+            compact
+            variant="ghost"
+            onPress={() => goTo('characterSelect')}
+          />
         </View>
         <Field
-          label="名前"
+          label={copy.character.name}
           value={flow.customCharacterDraft.name}
           onChangeText={(name) => updateCharacterDraft({ name })}
         />
         <Field
-          label="関係性"
+          label={copy.character.relationship}
           value={flow.customCharacterDraft.relationship}
           onChangeText={(relationship) => updateCharacterDraft({ relationship })}
         />
         <Field
-          label="話し方"
+          label={copy.character.tone}
           value={flow.customCharacterDraft.tone}
           onChangeText={(tone) => updateCharacterDraft({ tone })}
         />
         <Stepper
-          label="厳しさ"
+          label={copy.character.strictness}
           value={flow.customCharacterDraft.strictness}
           onChange={(strictness) => updateCharacterDraft({ strictness })}
         />
         <Stepper
-          label="温かさ"
+          label={copy.character.warmth}
           value={flow.customCharacterDraft.warmth}
           onChange={(warmth) => updateCharacterDraft({ warmth })}
         />
@@ -669,12 +700,16 @@ export default function App() {
           <View style={styles.characterIdentity}>
             <PixelAvatar character={previewCharacter} />
             <View style={styles.flexColumn}>
-              <Text style={styles.label}>プレビュー</Text>
+              <Text style={styles.label}>{copy.character.preview}</Text>
               <Text style={styles.value}>{characterCreate.previewText}</Text>
             </View>
           </View>
           <Button
-            label={characterCreate.previewStatus === 'generating' ? '反映' : '生成'}
+            label={
+              characterCreate.previewStatus === 'generating'
+                ? copy.character.applyPreview
+                : copy.character.generatePreview
+            }
             compact
             variant="secondary"
             onPress={() =>
@@ -689,7 +724,7 @@ export default function App() {
         {characterCreate.validationError !== undefined ? (
           <InlineError error={characterCreate.validationError} />
         ) : null}
-        <Button label="保存" onPress={saveCustomCharacter} />
+        <Button label={copy.common.save} onPress={saveCustomCharacter} />
       </View>
     );
   }
@@ -699,11 +734,11 @@ export default function App() {
       <View style={styles.stack}>
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.kicker}>History</Text>
-            <Text style={styles.title}>通知履歴</Text>
+            <Text style={styles.kicker}>{copy.history.kicker}</Text>
+            <Text style={styles.title}>{copy.history.title}</Text>
           </View>
           <Button
-            label="再読込"
+            label={copy.history.reload}
             compact
             variant="secondary"
             onPress={() =>
@@ -718,7 +753,7 @@ export default function App() {
           <View style={styles.stack}>
             <View style={styles.skeletonRow} />
             <Button
-              label="読込完了"
+              label={copy.history.loadComplete}
               compact
               onPress={() =>
                 updateSecondary((current) => ({
@@ -732,11 +767,11 @@ export default function App() {
         {history.emptyMessage !== undefined ? (
           <View style={styles.emptyState}>
             <Text style={styles.title}>{history.emptyMessage}</Text>
-            <Text style={styles.body}>Cue 通知が届くとここから再利用できます。</Text>
+            <Text style={styles.body}>{copy.history.emptyBody}</Text>
           </View>
         ) : null}
         {history.errorMessage !== undefined ? (
-          <InlineError error={{ message: history.errorMessage, actionLabel: '再試行' }} />
+          <InlineError error={{ message: history.errorMessage, actionLabel: copy.common.retry }} />
         ) : null}
         {history.rows.map((row) => {
           const item = secondary.historyItems.find((historyItem) => historyItem.id === row.id);
@@ -760,15 +795,15 @@ export default function App() {
               </View>
               <Text style={styles.meta}>{row.detail}</Text>
               <View style={styles.inlineActions}>
-                <Button label="再利用" compact onPress={() => reuseHistoryItem(item)} />
+                <Button label={copy.history.reuse} compact onPress={() => reuseHistoryItem(item)} />
                 <Button
-                  label="チャット"
+                  label={copy.history.chat}
                   compact
                   variant="secondary"
                   onPress={() => openChatForHistory(item)}
                 />
                 <Button
-                  label="削除"
+                  label={copy.common.delete}
                   compact
                   variant="danger"
                   onPress={() => deleteHistoryItem(row.id)}
@@ -788,7 +823,7 @@ export default function App() {
           <View style={styles.chatTitleRow}>
             <PixelAvatar character={selectedCharacter} size="large" />
             <View>
-              <Text style={styles.kicker}>Chat</Text>
+              <Text style={styles.kicker}>{copy.chat.kicker}</Text>
               <Text style={styles.title}>{chat.characterName}</Text>
             </View>
           </View>
@@ -800,7 +835,7 @@ export default function App() {
           </View>
         ) : null}
         {chat.errorMessage !== undefined ? (
-          <InlineError error={{ message: chat.errorMessage, actionLabel: '再送信' }} />
+          <InlineError error={{ message: chat.errorMessage, actionLabel: copy.chat.resend }} />
         ) : null}
         {chat.messages.map((message) => (
           <View
@@ -810,12 +845,14 @@ export default function App() {
               message.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant,
             ]}
           >
-            <Text style={styles.meta}>{message.role === 'user' ? 'You' : chat.characterName}</Text>
+            <Text style={styles.meta}>
+              {message.role === 'user' ? copy.chat.you : chat.characterName}
+            </Text>
             <Text style={styles.value}>{message.body}</Text>
           </View>
         ))}
         <Field
-          label="メッセージ"
+          label={copy.chat.messageLabel}
           value={secondary.chatInput}
           multiline
           onChangeText={(chatInput) =>
@@ -827,10 +864,15 @@ export default function App() {
           }
         />
         <View style={styles.inlineActions}>
-          <Button label="送信" compact onPress={sendChatMessage} />
-          <Button label="Cue 化" compact variant="secondary" onPress={createReminderFromChat} />
+          <Button label={copy.chat.send} compact onPress={sendChatMessage} />
           <Button
-            label="応答失敗"
+            label={copy.chat.createCue}
+            compact
+            variant="secondary"
+            onPress={createReminderFromChat}
+          />
+          <Button
+            label={copy.chat.simulateFailure}
             compact
             variant="ghost"
             onPress={() =>
@@ -849,7 +891,7 @@ export default function App() {
     return (
       <View style={styles.stack}>
         <View style={styles.heroBand}>
-          <Text style={styles.kicker}>Pro</Text>
+          <Text style={styles.kicker}>{copy.pro.kicker}</Text>
           <Text style={styles.heroTitle}>{pro.title}</Text>
           <Text style={styles.body}>{pro.benefits.join(' / ')}</Text>
         </View>
@@ -860,9 +902,7 @@ export default function App() {
         {pro.comparisonRows.map((row) => (
           <View key={row.label} style={styles.planRow}>
             <Text style={styles.value}>{row.label}</Text>
-            <Text style={styles.meta}>
-              Free {row.free} / Pro {row.pro}
-            </Text>
+            <Text style={styles.meta}>{copy.pro.comparison(row.free, row.pro)}</Text>
           </View>
         ))}
         <View style={styles.inlineActions}>
@@ -888,7 +928,7 @@ export default function App() {
             }
           />
           <Button
-            label="購入失敗"
+            label={copy.pro.showPurchaseFailure}
             compact
             variant="ghost"
             onPress={() =>
@@ -899,7 +939,7 @@ export default function App() {
             }
           />
         </View>
-        <Button label="ホームへ戻る" onPress={() => goTo('home')} />
+        <Button label={copy.pro.home} onPress={() => goTo('home')} />
       </View>
     );
   }
@@ -909,11 +949,11 @@ export default function App() {
       <View style={styles.stack}>
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.kicker}>Store</Text>
-            <Text style={styles.title}>Character Pack</Text>
+            <Text style={styles.kicker}>{copy.packs.kicker}</Text>
+            <Text style={styles.title}>{copy.packs.title}</Text>
           </View>
           <Button
-            label="復元"
+            label={copy.packs.restore}
             compact
             variant="secondary"
             onPress={() =>
@@ -958,7 +998,7 @@ export default function App() {
           );
         })}
         <Button
-          label="購入失敗を表示"
+          label={copy.packs.showPurchaseFailure}
           variant="ghost"
           onPress={() =>
             updateSecondary((current) => ({
@@ -975,7 +1015,7 @@ export default function App() {
     return (
       <View style={styles.stack}>
         <View>
-          <Text style={styles.kicker}>Settings</Text>
+          <Text style={styles.kicker}>{copy.settings.kicker}</Text>
           <Text style={styles.title}>{copy.settings.title}</Text>
         </View>
         {settings.selectedDetail !== undefined ? (
@@ -996,7 +1036,9 @@ export default function App() {
               </Text>
               <Text style={styles.meta}>{row.detail}</Text>
             </View>
-            <Text style={styles.meta}>{copy.settings.open}</Text>
+            <Text style={styles.meta}>
+              {row.destination === 'language' ? copy.settings.languageToggle : copy.settings.open}
+            </Text>
           </Pressable>
         ))}
       </View>

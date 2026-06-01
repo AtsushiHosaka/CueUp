@@ -10,6 +10,8 @@ import { CustomCharacterService } from './characters/customCharacterService.js';
 import { InMemoryNotificationJobRepository } from './notifications/notificationJobRepository.js';
 import { NotificationJobService } from './notifications/notificationJobService.js';
 import { InMemoryUsageQuotaRepository } from './notifications/notificationRepository.js';
+import { InMemoryObservabilitySink } from './observability/observabilitySink.js';
+import { ObservabilityService } from './observability/observabilityService.js';
 import { InMemoryOrganizerRepository } from './organizer/organizerRepository.js';
 import { OrganizerService } from './organizer/organizerService.js';
 import { InMemoryReminderRepository } from './reminders/reminderRepository.js';
@@ -33,6 +35,7 @@ function createChatDependencies(
   let id = 1;
   const reminderRepository = new InMemoryReminderRepository();
   const chatMessages = new InMemoryChatMessageRepository();
+  const observabilitySink = new InMemoryObservabilitySink();
   const quotas = new InMemoryUsageQuotaRepository(
     params.chatMessageCount === undefined
       ? []
@@ -63,8 +66,10 @@ function createChatDependencies(
           }),
         () => `chat-${id++}`,
       ),
+      observability: new ObservabilityService(observabilitySink, () => `observability-${id++}`),
       reminders: new ReminderService(reminderRepository, () => 'reminder-1'),
     },
+    observabilitySink,
     quotas,
   };
 }
@@ -87,7 +92,7 @@ test('GET /v1/bootstrap returns free plan limits', async () => {
 });
 
 test('POST /v1/chats/:characterId/messages stores a character chat exchange', async () => {
-  const { dependencies } = createChatDependencies();
+  const { dependencies, observabilitySink } = createChatDependencies();
   const response = await routeRequest(
     'POST',
     '/v1/chats/character-strict-boss/messages',
@@ -119,6 +124,8 @@ test('POST /v1/chats/:characterId/messages stores a character chat exchange', as
   assert.equal(body.quota.chatMessageCount, 1);
   assert.equal(body.reminderDraft.characterId, 'character-strict-boss');
   assert.equal(body.reminderDraft.title, '企画書を明日の朝に思い出したい');
+  assert.equal(observabilitySink.analyticsEvents[0]?.eventType, 'chat_message_sent');
+  assert.equal(observabilitySink.analyticsEvents[0]?.context.characterId, 'character-strict-boss');
 });
 
 test('GET /v1/chats/:characterId/messages returns owned chat history', async () => {
@@ -156,7 +163,7 @@ test('GET /v1/chats/:characterId/messages returns owned chat history', async () 
 });
 
 test('POST /v1/chats/:characterId/messages blocks free monthly chat limit', async () => {
-  const { dependencies } = createChatDependencies({ chatMessageCount: 5 });
+  const { dependencies, observabilitySink } = createChatDependencies({ chatMessageCount: 5 });
   const response = await routeRequest(
     'POST',
     '/v1/chats/character-strict-boss/messages',
@@ -177,6 +184,8 @@ test('POST /v1/chats/:characterId/messages blocks free monthly chat limit', asyn
   assert.equal(response.statusCode, 402);
   assert.equal(body.error, 'plan_limit_exceeded');
   assert.equal(body.details.upgradeTarget, 'pro');
+  assert.equal(observabilitySink.analyticsEvents[0]?.eventType, 'free_limit_reached');
+  assert.equal(observabilitySink.analyticsEvents[0]?.context.feature, 'chat');
 });
 
 test('POST /v1/chats/:characterId/messages reports AI failures to the UI', async () => {

@@ -80,6 +80,7 @@ const sensitiveLogFields = new Set([
   'note',
   'personaPrompt',
   'prohibitedStyle',
+  'prompt',
   'relationship',
   'title',
   'tokenUsage',

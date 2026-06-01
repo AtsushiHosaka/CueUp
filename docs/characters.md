@@ -13,6 +13,24 @@ The initial seed includes built-in characters and one pack character:
 
 Custom characters are listed only for their owner.
 
+## Visual Tone
+
+All built-in and pack character icons must use abstract pixel-art avatars. They should feel
+like compact game UI portraits, not photos, painted portraits, generated headshots, or direct
+likenesses of real people.
+
+Design requirements:
+
+- use a small fixed pixel grid with crisp edges and no blur
+- keep silhouettes symbolic and archetypal, even when the persona is inspired by a familiar role
+- avoid celebrity names, real-person likeness, trademarked outfits, and direct portrait references
+- give each persona a distinct palette, outline, and accent color
+- render local app icons from deterministic pixel data where possible instead of remote AI images
+
+If a future native iOS renderer needs extra polish, Swift Package Manager dependencies are allowed,
+but the default mobile implementation should keep the pixel avatar system local, deterministic, and
+portable across iOS and Android.
+
 ## Availability
 
 Catalog items return one of:

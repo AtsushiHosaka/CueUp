@@ -44,7 +44,7 @@ test('history model supports loading, empty, reuse, delete, and chat affordances
   assert.equal(ready.rows[1]?.statusLabel, 'Fallback');
 });
 
-test('chat model shows first greeting, remaining quota, and AI failure', () => {
+test('chat model shows first greeting, remaining quota, and response failure', () => {
   const empty = createChatScreenModel(createSecondaryFlowState(now), character);
   const failed = createChatScreenModel(
     {
@@ -68,7 +68,7 @@ test('chat model shows first greeting, remaining quota, and AI failure', () => {
     empty.emptyGreeting,
     'Strict Boss: まず今つまずいていることを一言で送ってください。',
   );
-  assert.equal(failed.errorMessage, 'AI 応答を取得できませんでした。');
+  assert.equal(failed.errorMessage, '応答を取得できませんでした。');
   assert.equal(replied.messages.length, 2);
   assert.equal(replied.remainingLabel, '残り無料 4 回');
 });

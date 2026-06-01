@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { StaticAiTextProvider } from './ai/aiProvider.js';
+import { InMemoryBillingRepository } from './billing/billingRepository.js';
+import { BillingService } from './billing/billingService.js';
+import type { VerifiedBillingTransaction } from './billing/billingVerifier.js';
 import { InMemoryChatMessageRepository } from './chat/chatRepository.js';
 import { ChatService } from './chat/chatService.js';
 import { CharacterCatalogService } from './characters/characterCatalogService.js';
@@ -23,6 +26,26 @@ const testConfig = {
   port: 0,
   nodeEnv: 'test',
   aiProvider: 'disabled' as const,
+  billingVerificationEnabled: false,
+  billingProducts: [
+    {
+      id: 'pro-ios',
+      displayName: 'CueUp Pro',
+      kind: 'pro_subscription' as const,
+      platform: 'app_store' as const,
+      priceLabel: '$4.99/mo',
+      productId: 'cueup.pro.monthly',
+    },
+    {
+      id: 'pack-ios',
+      displayName: 'Focus Pack',
+      kind: 'character_pack' as const,
+      packId: 'focus-pack',
+      platform: 'app_store' as const,
+      priceLabel: '$1.99',
+      productId: 'cueup.pack.focus',
+    },
+  ],
   serverOnlyCredentialNames: ['OPENAI_API_KEY'],
 };
 
@@ -89,6 +112,165 @@ test('GET /v1/bootstrap returns free plan limits', async () => {
 
   assert.equal(response.statusCode, 200);
   assert.equal(body.planLimits.free.activeReminders, 20);
+});
+
+test('GET /v1/billing/products returns configured store products', async () => {
+  const dependencies = {
+    billing: new BillingService(
+      new InMemoryBillingRepository(),
+      verifier(),
+      () => 'quota-1',
+      testConfig.billingProducts,
+    ),
+    reminders: new ReminderService(new InMemoryReminderRepository(), () => 'reminder-1'),
+  };
+  const response = await routeRequest('GET', '/v1/billing/products', 'localhost', testConfig, {
+    dependencies,
+  });
+  const body = response.payload as { products: Array<{ productId: string; priceLabel: string }> };
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(body.products[0]?.productId, 'cueup.pro.monthly');
+  assert.equal(body.products[0]?.priceLabel, '$4.99/mo');
+});
+
+test('GET /v1/reminders uses default dependencies without billing configured', async () => {
+  const response = await routeRequest('GET', '/v1/reminders', 'localhost', testConfig, {
+    actor: { userId: 'alice', role: 'user' },
+    now: '2026-06-01T00:00:00.000Z',
+  });
+  const body = response.payload as { reminders: unknown[] };
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(body.reminders, []);
+});
+
+test('POST /v1/billing/verify rejects unverified receipts', async () => {
+  const dependencies = {
+    billing: new BillingService(
+      new InMemoryBillingRepository(),
+      {
+        async verify() {
+          throw new Error('store rejected');
+        },
+      },
+      () => 'quota-1',
+      testConfig.billingProducts,
+    ),
+    reminders: new ReminderService(new InMemoryReminderRepository(), () => 'reminder-1'),
+  };
+  const response = await routeRequest('POST', '/v1/billing/verify', 'localhost', testConfig, {
+    actor: { userId: 'alice', role: 'user' },
+    body: {
+      platform: 'app_store',
+      productId: 'cueup.pro.monthly',
+      receipt: 'client-assertion-only',
+    },
+    dependencies,
+    now: '2026-06-01T00:00:00.000Z',
+  });
+  const body = response.payload as { error: string; details: { restoreAction: string } };
+
+  assert.equal(response.statusCode, 402);
+  assert.equal(body.error, 'billing_verification_failed');
+  assert.equal(body.details.restoreAction, 'restore_purchases');
+});
+
+test('POST /v1/billing/verify grants Pro after verified store transaction', async () => {
+  const dependencies = {
+    billing: new BillingService(
+      new InMemoryBillingRepository(),
+      verifier({
+        kind: 'pro_subscription',
+        platform: 'app_store',
+        productId: 'cueup.pro.monthly',
+        status: 'active',
+        transactionId: 'txn-1',
+        purchasedAt: '2026-06-01T00:00:00.000Z',
+        expiresAt: '2026-07-01T00:00:00.000Z',
+      }),
+      () => 'quota-1',
+      testConfig.billingProducts,
+    ),
+    reminders: new ReminderService(new InMemoryReminderRepository(), () => 'reminder-1'),
+  };
+  const response = await routeRequest('POST', '/v1/billing/verify', 'localhost', testConfig, {
+    actor: { userId: 'alice', role: 'user' },
+    body: {
+      platform: 'app_store',
+      productId: 'cueup.pro.monthly',
+      receipt: 'store-receipt',
+    },
+    dependencies,
+    now: '2026-06-01T00:00:00.000Z',
+  });
+  const body = response.payload as {
+    entitlement: { plan: string; limits: { activeReminders: number } };
+    subscription: { status: string };
+  };
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(body.subscription.status, 'active');
+  assert.equal(body.entitlement.plan, 'pro');
+  assert.equal(body.entitlement.limits.activeReminders, 1000);
+});
+
+test('POST /v1/billing/usage maps Free quota limit errors', async () => {
+  const dependencies = {
+    billing: new BillingService(
+      new InMemoryBillingRepository({
+        quotas: [
+          {
+            id: 'quota-1',
+            userId: 'alice',
+            period: '2026-06',
+            aiNotificationCount: 0,
+            chatMessageCount: 5,
+            createdAt: '2026-06-01T00:00:00.000Z',
+            updatedAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+      }),
+      verifier(),
+      () => 'quota-2',
+      testConfig.billingProducts,
+    ),
+    reminders: new ReminderService(new InMemoryReminderRepository(), () => 'reminder-1'),
+  };
+  const response = await routeRequest('POST', '/v1/billing/usage', 'localhost', testConfig, {
+    actor: { userId: 'alice', role: 'user' },
+    body: {
+      kind: 'chat_message',
+    },
+    dependencies,
+    now: '2026-06-01T00:00:00.000Z',
+  });
+  const body = response.payload as { error: string; details: { upgradeTarget: string } };
+
+  assert.equal(response.statusCode, 402);
+  assert.equal(body.error, 'plan_limit_exceeded');
+  assert.equal(body.details.upgradeTarget, 'pro');
+});
+
+test('GET /v1/reminders uses default dependencies when billing is not configured', async () => {
+  const response = await routeRequest(
+    'GET',
+    '/v1/reminders',
+    'localhost',
+    {
+      ...testConfig,
+      billingProducts: [],
+    },
+    {
+      actor: { userId: 'alice', role: 'user' },
+      now: '2026-06-01T00:00:00.000Z',
+      plan: 'free',
+    },
+  );
+  const body = response.payload as { reminders: unknown[] };
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(Array.isArray(body.reminders), true);
 });
 
 test('POST /v1/chats/:characterId/messages stores a character chat exchange', async () => {
@@ -593,3 +775,15 @@ test('PATCH /v1/characters/custom/:id maps safety review errors', async () => {
   assert.equal(body.error, 'safety_review_required');
   assert.equal(body.details.reason, 'real_person_reference');
 });
+
+function verifier(transaction?: VerifiedBillingTransaction) {
+  return {
+    async verify() {
+      if (transaction === undefined) {
+        throw new Error('not configured for this test');
+      }
+
+      return transaction;
+    },
+  };
+}

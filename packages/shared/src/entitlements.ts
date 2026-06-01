@@ -18,12 +18,12 @@ export type EntitlementSnapshot = {
 };
 
 export function isActiveSubscription(subscription: Subscription, now: Date = new Date()): boolean {
-  if (subscription.status !== 'active') {
+  if (subscription.status !== 'active' && subscription.status !== 'canceled') {
     return false;
   }
 
   if (subscription.expiresAt === undefined || subscription.expiresAt === null) {
-    return true;
+    return subscription.status === 'active';
   }
 
   return new Date(subscription.expiresAt).getTime() > now.getTime();

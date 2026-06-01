@@ -19,7 +19,7 @@ const user: User = {
   updatedAt: now.toISOString(),
 };
 
-test('isActiveSubscription rejects expired or inactive subscriptions', () => {
+test('isActiveSubscription rejects expired/refunded subscriptions and keeps canceled until expiry', () => {
   const expired: Subscription = {
     id: 'sub-1',
     userId: user.id,
@@ -32,10 +32,27 @@ test('isActiveSubscription rejects expired or inactive subscriptions', () => {
   };
 
   assert.equal(isActiveSubscription(expired, now), false);
-  assert.equal(isActiveSubscription({ ...expired, status: 'canceled' }, now), false);
+  assert.equal(
+    isActiveSubscription(
+      { ...expired, status: 'canceled', expiresAt: '2026-06-02T00:00:00.000Z' },
+      now,
+    ),
+    true,
+  );
+  const { expiresAt: _expiresAt, ...canceledNoExpiry } = {
+    ...expired,
+    status: 'canceled' as const,
+  };
+
+  assert.equal(isActiveSubscription(canceledNoExpiry, now), false);
+  assert.equal(isActiveSubscription({ ...expired, status: 'refunded' }, now), false);
   assert.equal(
     isActiveSubscription({ ...expired, expiresAt: '2026-06-02T00:00:00.000Z' }, now),
     true,
+  );
+  assert.equal(
+    isActiveSubscription({ ...expired, status: 'canceled', expiresAt: null }, now),
+    false,
   );
 });
 

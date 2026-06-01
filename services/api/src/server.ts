@@ -28,6 +28,8 @@ import type { Actor } from './data/accessControl.js';
 import { InMemoryNotificationJobRepository } from './notifications/notificationJobRepository.js';
 import { NotificationJobService } from './notifications/notificationJobService.js';
 import { InMemoryUsageQuotaRepository } from './notifications/notificationRepository.js';
+import { InMemoryObservabilitySink } from './observability/observabilitySink.js';
+import { ObservabilityService } from './observability/observabilityService.js';
 import { OrganizerServiceError } from './organizer/organizerErrors.js';
 import { InMemoryOrganizerRepository } from './organizer/organizerRepository.js';
 import {
@@ -63,6 +65,7 @@ type RouteContext = {
 type ApiDependencies = {
   chat?: ChatService;
   characters?: CustomCharacterService;
+  observability?: ObservabilityService;
   organizer?: OrganizerService;
   reminders: ReminderService;
   snoozes?: SnoozeService;
@@ -118,6 +121,7 @@ export function createApiDependencies(): ApiDependencies {
       randomUUID,
     ),
     characters: new CustomCharacterService(characters, randomUUID),
+    observability: new ObservabilityService(new InMemoryObservabilitySink(), randomUUID),
     organizer: new OrganizerService(new InMemoryOrganizerRepository(), reminders, randomUUID),
     reminders: new ReminderService(reminders, randomUUID),
     snoozes: new SnoozeService(reminders, new NotificationJobService(notificationJobs, randomUUID)),
@@ -760,11 +764,13 @@ async function routeChatRequest(
   }
 
   const dependencies = context.dependencies ?? createApiDependencies();
+  let actor: Actor | undefined;
+  let now: IsoDateTime | undefined;
 
   try {
-    const actor = resolveActor(context);
+    actor = resolveActor(context);
     const plan = resolvePlan(context);
-    const now = resolveNow(context);
+    now = resolveNow(context);
     const entitlement = createRouteEntitlement(actor, plan, now);
     const chat = resolveChatService(dependencies);
 
@@ -791,6 +797,20 @@ async function routeChatRequest(
         now: new Date(now),
       });
 
+      await dependencies.observability?.trackAnalyticsEvent({
+        eventType: 'chat_message_sent',
+        userId: actor.userId,
+        now: new Date(now),
+        context: {
+          characterId,
+          messageCount: result.messages.length,
+          remainingFreeChats: Math.max(
+            0,
+            entitlement.limits.monthlyChats - result.quota.chatMessageCount,
+          ),
+        },
+      });
+
       return {
         statusCode: 201,
         payload: {
@@ -804,6 +824,23 @@ async function routeChatRequest(
 
     return undefined;
   } catch (error) {
+    if (
+      error instanceof ChatServiceError &&
+      error.code === 'CHAT_FREE_LIMIT_EXCEEDED' &&
+      actor !== undefined &&
+      now !== undefined
+    ) {
+      await dependencies.observability?.trackAnalyticsEvent({
+        eventType: 'free_limit_reached',
+        userId: actor.userId,
+        now: new Date(now),
+        context: {
+          feature: 'chat',
+          limit: error.details.limit,
+        },
+      });
+    }
+
     return mapChatError(error);
   }
 }

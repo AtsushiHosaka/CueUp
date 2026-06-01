@@ -5,6 +5,7 @@ import test from 'node:test';
 const schema = readFileSync('migrations/0001_initial_schema.sql', 'utf8');
 const snoozeSchema = readFileSync('migrations/0003_snooze_notification_jobs.sql', 'utf8');
 const customCharacterSchema = readFileSync('migrations/0004_custom_character_safety.sql', 'utf8');
+const observabilitySchema = readFileSync('migrations/0005_observability_events.sql', 'utf8');
 
 const requiredTables = [
   'users',
@@ -77,4 +78,18 @@ test('custom character migration stores safety review metadata and owner isolati
     customCharacterSchema,
     /create policy characters_custom_owner_update on characters/i,
   );
+});
+
+test('observability migration stores audit analytics and operational events', () => {
+  for (const table of ['audit_events', 'analytics_events', 'operational_logs']) {
+    assert.match(observabilitySchema, new RegExp(`create table ${table} \\(`, 'i'));
+    assert.match(
+      observabilitySchema,
+      new RegExp(`alter table ${table} enable row level security`, 'i'),
+    );
+    assert.match(observabilitySchema, new RegExp(`${table}_service_only`, 'i'));
+  }
+
+  assert.match(observabilitySchema, /context jsonb not null default '\{\}'::jsonb/i);
+  assert.match(observabilitySchema, /failure_reason text/i);
 });

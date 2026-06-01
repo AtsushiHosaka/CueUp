@@ -9,6 +9,13 @@ export type ReminderStatus = 'active' | 'completed' | 'snoozed' | 'deleted';
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
 export type CharacterType = 'built_in' | 'custom' | 'pack';
 export type GenerationStatus = 'success' | 'fallback' | 'failed';
+export type NotificationJobStatus =
+  | 'scheduled'
+  | 'retry_scheduled'
+  | 'sent'
+  | 'failed'
+  | 'canceled';
+export type NotificationJobType = 'reminder' | 'snooze';
 export type BillingPlatform = 'app_store' | 'google_play';
 export type DevicePlatform = 'ios' | 'android';
 export type DeviceTokenStatus = 'active' | 'disabled' | 'invalid';
@@ -55,6 +62,8 @@ export type Reminder = Timestamped &
     tagIds?: UUID[];
     status: ReminderStatus;
     completedAt?: IsoDateTime | null;
+    snoozedUntil?: IsoDateTime | null;
+    snoozeCount?: number;
   };
 
 export type Character = Timestamped & {
@@ -85,6 +94,17 @@ export type NotificationMessage = {
   tokenUsage?: JsonObject | null;
   hiddenAt?: IsoDateTime | null;
   createdAt: IsoDateTime;
+};
+
+export type NotificationJob = Timestamped & {
+  id: UUID;
+  userId: UUID;
+  reminderId: UUID;
+  type: NotificationJobType;
+  scheduledFor: IsoDateTime;
+  status: NotificationJobStatus;
+  attempts: number;
+  lastError?: string | null;
 };
 
 export type Folder = Timestamped & {
@@ -166,6 +186,7 @@ export type PushDelivery = {
 
 export type UserScopedRecord =
   | Reminder
+  | NotificationJob
   | NotificationMessage
   | Folder
   | Tag

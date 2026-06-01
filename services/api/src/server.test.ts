@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { InMemoryReminderRepository, ReminderService } from './reminders.js';
+import { InMemoryReminderRepository } from './reminders/reminderRepository.js';
+import { ReminderService } from './reminders/reminderService.js';
 import { routeRequest } from './server.js';
 
 const testConfig = {
@@ -12,7 +13,7 @@ const testConfig = {
 };
 
 test('GET /health returns service status', async () => {
-  const response = routeRequest('GET', '/health', 'localhost', testConfig);
+  const response = await routeRequest('GET', '/health', 'localhost', testConfig);
   const body = response.payload as { status: string; service: string };
 
   assert.equal(response.statusCode, 200);
@@ -21,7 +22,7 @@ test('GET /health returns service status', async () => {
 });
 
 test('GET /v1/bootstrap returns free plan limits', async () => {
-  const response = routeRequest('GET', '/v1/bootstrap', 'localhost', testConfig);
+  const response = await routeRequest('GET', '/v1/bootstrap', 'localhost', testConfig);
   const body = response.payload as { planLimits: { free: { activeReminders: number } } };
 
   assert.equal(response.statusCode, 200);
@@ -30,12 +31,9 @@ test('GET /v1/bootstrap returns free plan limits', async () => {
 
 test('POST /v1/reminders creates a reminder for the authenticated user', async () => {
   const dependencies = {
-    reminders: new ReminderService(new InMemoryReminderRepository(), {
-      idFactory: () => 'reminder-1',
-      now: () => new Date('2026-06-01T00:00:00.000Z'),
-    }),
+    reminders: new ReminderService(new InMemoryReminderRepository(), () => 'reminder-1'),
   };
-  const response = routeRequest('POST', '/v1/reminders', 'localhost', testConfig, {
+  const response = await routeRequest('POST', '/v1/reminders', 'localhost', testConfig, {
     actor: { userId: 'alice', role: 'user' },
     body: {
       title: 'Plan workout',
@@ -43,6 +41,7 @@ test('POST /v1/reminders creates a reminder for the authenticated user', async (
       characterId: 'character-1',
     },
     dependencies,
+    now: '2026-06-01T00:00:00.000Z',
     plan: 'free',
   });
   const body = response.payload as { reminder: { id: string; userId: string; title: string } };
@@ -54,7 +53,7 @@ test('POST /v1/reminders creates a reminder for the authenticated user', async (
 });
 
 test('GET /v1/reminders requires an authenticated user', async () => {
-  const response = routeRequest('GET', '/v1/reminders', 'localhost', testConfig);
+  const response = await routeRequest('GET', '/v1/reminders', 'localhost', testConfig);
   const body = response.payload as { error: string };
 
   assert.equal(response.statusCode, 401);
@@ -80,18 +79,23 @@ test('PATCH /v1/reminders/:id reports validation errors', async () => {
           updatedAt: '2026-06-01T00:00:00.000Z',
         },
       ]),
-      {
-        now: () => new Date('2026-06-01T00:00:00.000Z'),
-      },
+      () => 'generated-1',
     ),
   };
-  const response = routeRequest('PATCH', '/v1/reminders/reminder-1', 'localhost', testConfig, {
-    actor: { userId: 'alice', role: 'user' },
-    body: {
-      scheduledAt: 'not-a-date',
+  const response = await routeRequest(
+    'PATCH',
+    '/v1/reminders/reminder-1',
+    'localhost',
+    testConfig,
+    {
+      actor: { userId: 'alice', role: 'user' },
+      body: {
+        scheduledAt: 'not-a-date',
+      },
+      dependencies,
+      now: '2026-06-01T00:00:00.000Z',
     },
-    dependencies,
-  });
+  );
   const body = response.payload as { error: string; details: { field: string } };
 
   assert.equal(response.statusCode, 400);

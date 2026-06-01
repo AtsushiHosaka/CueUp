@@ -1,20 +1,29 @@
-import { FREE_PLAN_LIMITS, type Plan } from '@cueup/shared';
+import {
+  FREE_PLAN_LIMITS,
+  createEmptyUsageQuota,
+  createEntitlementSnapshot,
+  type IsoDateTime,
+  type Plan,
+  type User,
+} from '@cueup/shared';
 import {
   createServer as createHttpServer,
   type IncomingHttpHeaders,
   type IncomingMessage,
   type ServerResponse,
 } from 'node:http';
+import { randomUUID } from 'node:crypto';
 
 import type { RuntimeConfig } from './config.js';
 import { getRuntimeConfig } from './config.js';
 import type { Actor } from './data/accessControl.js';
+import { ReminderServiceError } from './reminders/reminderErrors.js';
+import { InMemoryReminderRepository } from './reminders/reminderRepository.js';
 import {
-  InMemoryReminderRepository,
   ReminderService,
-  ReminderServiceError,
-  type ReminderInput,
-} from './reminders.js';
+  type CreateReminderInput,
+  type UpdateReminderInput,
+} from './reminders/reminderService.js';
 
 type JsonValue = boolean | number | string | null | JsonValue[] | { [key: string]: JsonValue };
 type RouteResult = {
@@ -26,6 +35,7 @@ type RouteContext = {
   body?: unknown;
   dependencies?: ApiDependencies;
   headers?: IncomingHttpHeaders;
+  now?: IsoDateTime;
   plan?: Plan;
 };
 type ApiDependencies = {
@@ -66,7 +76,7 @@ export function createServer(
 
 export function createApiDependencies(): ApiDependencies {
   return {
-    reminders: new ReminderService(new InMemoryReminderRepository()),
+    reminders: new ReminderService(new InMemoryReminderRepository(), randomUUID),
   };
 }
 
@@ -78,7 +88,7 @@ async function handleRequest(
 ): Promise<void> {
   try {
     const body = await readJsonBody(request);
-    const result = routeRequest(
+    const result = await routeRequest(
       request.method ?? 'GET',
       request.url ?? '/',
       request.headers.host ?? 'localhost',
@@ -170,18 +180,18 @@ function mapReminderError(error: unknown): RouteResult {
   }
 
   const statusCodeByError = {
-    ACCESS_DENIED: 403,
-    FREE_PLAN_LIMIT_REACHED: 402,
-    PERSISTENCE_UNAVAILABLE: 503,
-    RECORD_NOT_FOUND: 404,
-    VALIDATION_ERROR: 400,
+    REMINDER_ACCESS_DENIED: 403,
+    REMINDER_FREE_LIMIT_EXCEEDED: 402,
+    REMINDER_NOT_FOUND: 404,
+    REMINDER_PERSISTENCE_UNAVAILABLE: 503,
+    REMINDER_VALIDATION_ERROR: 400,
   } as const satisfies Record<string, number>;
   const apiErrorByCode = {
-    ACCESS_DENIED: 'forbidden',
-    FREE_PLAN_LIMIT_REACHED: 'plan_limit_exceeded',
-    PERSISTENCE_UNAVAILABLE: 'service_unavailable',
-    RECORD_NOT_FOUND: 'not_found',
-    VALIDATION_ERROR: 'invalid_request',
+    REMINDER_ACCESS_DENIED: 'forbidden',
+    REMINDER_FREE_LIMIT_EXCEEDED: 'plan_limit_exceeded',
+    REMINDER_NOT_FOUND: 'not_found',
+    REMINDER_PERSISTENCE_UNAVAILABLE: 'service_unavailable',
+    REMINDER_VALIDATION_ERROR: 'invalid_request',
   } as const satisfies Record<string, string>;
 
   return {
@@ -194,21 +204,22 @@ function mapReminderError(error: unknown): RouteResult {
   };
 }
 
-function handleReminderRequest(
+async function handleReminderRequest(
   method: string,
   pathname: string,
   context: RouteContext,
-): RouteResult | undefined {
+): Promise<RouteResult | undefined> {
   const dependencies = context.dependencies ?? createApiDependencies();
   const actor = resolveActor(context);
   const plan = resolvePlan(context);
+  const now = resolveNow(context);
 
   try {
     if (pathname === '/v1/reminders' && method === 'GET') {
       return {
         statusCode: 200,
         payload: {
-          reminders: dependencies.reminders.list(actor) as JsonValue,
+          reminders: (await dependencies.reminders.listReminders(actor)) as JsonValue,
         },
       };
     }
@@ -217,11 +228,12 @@ function handleReminderRequest(
       return {
         statusCode: 201,
         payload: {
-          reminder: dependencies.reminders.create(
+          reminder: (await dependencies.reminders.createReminder({
             actor,
-            plan,
-            requireObjectBody(context.body),
-          ) as JsonValue,
+            entitlement: createRouteEntitlement(actor, plan, now),
+            input: requireObjectBody(context.body) as CreateReminderInput,
+            now,
+          })) as JsonValue,
         },
       };
     }
@@ -242,7 +254,11 @@ function handleReminderRequest(
     if (action === 'complete' && method === 'POST') {
       return {
         statusCode: 200,
-        payload: dependencies.reminders.complete(actor, reminderId) as JsonValue,
+        payload: (await dependencies.reminders.completeReminder({
+          actor,
+          id: reminderId,
+          now,
+        })) as JsonValue,
       };
     }
 
@@ -254,7 +270,7 @@ function handleReminderRequest(
       return {
         statusCode: 200,
         payload: {
-          reminder: dependencies.reminders.get(actor, reminderId) as JsonValue,
+          reminder: (await dependencies.reminders.getReminder(actor, reminderId)) as JsonValue,
         },
       };
     }
@@ -263,11 +279,12 @@ function handleReminderRequest(
       return {
         statusCode: 200,
         payload: {
-          reminder: dependencies.reminders.update(
+          reminder: (await dependencies.reminders.updateReminder({
             actor,
-            reminderId,
-            requireObjectBody(context.body),
-          ) as JsonValue,
+            id: reminderId,
+            input: requireObjectBody(context.body) as UpdateReminderInput,
+            now,
+          })) as JsonValue,
         },
       };
     }
@@ -276,7 +293,11 @@ function handleReminderRequest(
       return {
         statusCode: 200,
         payload: {
-          reminder: dependencies.reminders.delete(actor, reminderId) as JsonValue,
+          reminder: (await dependencies.reminders.deleteReminder({
+            actor,
+            id: reminderId,
+            now,
+          })) as JsonValue,
         },
       };
     }
@@ -312,6 +333,35 @@ function resolvePlan(context: RouteContext): Plan {
   return headerValue(context.headers, 'x-user-plan') === 'pro' ? 'pro' : 'free';
 }
 
+function resolveNow(context: RouteContext): IsoDateTime {
+  return context.now ?? new Date().toISOString();
+}
+
+function createRouteEntitlement(actor: Actor, plan: Plan, now: IsoDateTime) {
+  const user: User = {
+    id: actor.userId,
+    provider: 'email',
+    locale: 'en',
+    timezone: 'UTC',
+    plan,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  return createEntitlementSnapshot({
+    user,
+    subscriptions: [],
+    characterPackPurchases: [],
+    usageQuota: createEmptyUsageQuota({
+      id: `route-quota-${actor.userId}`,
+      userId: actor.userId,
+      period: now.slice(0, 7),
+      now,
+    }),
+    now: new Date(now),
+  });
+}
+
 function headerValue(headers: IncomingHttpHeaders | undefined, name: string): string | undefined {
   const value = headers?.[name];
 
@@ -326,41 +376,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function requireObjectBody(body: unknown): ReminderInput {
+function requireObjectBody(body: unknown): Record<string, unknown> {
   if (!isRecord(body)) {
-    throw new ReminderServiceError('VALIDATION_ERROR', 'Request body must be a JSON object');
+    throw new ReminderServiceError(
+      'REMINDER_VALIDATION_ERROR',
+      'Request body must be a JSON object',
+    );
   }
 
   return body;
 }
 
-function routeReminderRequest(
+async function routeReminderRequest(
   method: string,
   pathname: string,
   context: RouteContext,
-): RouteResult | undefined {
+): Promise<RouteResult | undefined> {
   if (pathname !== '/v1/reminders' && !pathname.startsWith('/v1/reminders/')) {
     return undefined;
   }
 
   try {
-    return handleReminderRequest(method, pathname, context);
+    return await handleReminderRequest(method, pathname, context);
   } catch (error) {
     return mapReminderError(error);
   }
 }
 
-export function routeRequest(
+export async function routeRequest(
   method: string,
   requestUrl: string,
   host: string,
   config: RuntimeConfig,
   context: RouteContext = {},
-): RouteResult {
+): Promise<RouteResult> {
   const normalizedMethod = method.toUpperCase();
   const url = new URL(requestUrl, `http://${host}`);
 
-  const reminderResult = routeReminderRequest(normalizedMethod, url.pathname, context);
+  const reminderResult = await routeReminderRequest(normalizedMethod, url.pathname, context);
 
   if (reminderResult !== undefined) {
     return reminderResult;

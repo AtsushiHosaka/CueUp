@@ -80,6 +80,7 @@ export type NotificationMessage = {
   completedAt?: IsoDateTime | null;
   aiModel?: string | null;
   tokenUsage?: JsonObject | null;
+  hiddenAt?: IsoDateTime | null;
   createdAt: IsoDateTime;
 };
 

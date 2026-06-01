@@ -70,6 +70,7 @@ create table notification_messages (
   completed_at timestamptz,
   ai_model text,
   token_usage jsonb,
+  hidden_at timestamptz,
   created_at timestamptz not null
 );
 
@@ -132,7 +133,7 @@ create table chat_messages (
 
 create index users_deleted_idx on users(deleted_at);
 create index reminders_user_active_idx on reminders(user_id, scheduled_at) where deleted_at is null and status <> 'deleted';
-create index notification_messages_user_created_idx on notification_messages(user_id, created_at desc);
+create index notification_messages_user_created_idx on notification_messages(user_id, created_at desc) where hidden_at is null;
 create index folders_user_sort_idx on folders(user_id, sort_order);
 create index tags_user_name_idx on tags(user_id, name);
 create index subscriptions_user_status_idx on subscriptions(user_id, status);

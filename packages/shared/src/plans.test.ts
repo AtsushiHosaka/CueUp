@@ -8,6 +8,7 @@ test('free plan follows the spec foundation limits', () => {
   assert.equal(FREE_PLAN_LIMITS.activeCharacters, 3);
   assert.equal(FREE_PLAN_LIMITS.customCharacters, 1);
   assert.equal(FREE_PLAN_LIMITS.monthlyAiNotifications, 100);
+  assert.equal(FREE_PLAN_LIMITS.notificationHistoryDays, 7);
 });
 
 test('getPlanLimits falls back to free for free plan', () => {

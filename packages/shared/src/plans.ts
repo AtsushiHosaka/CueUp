@@ -6,6 +6,7 @@ export type PlanLimits = {
   customCharacters: number;
   monthlyAiNotifications: number;
   monthlyChats: number;
+  notificationHistoryDays: number | null;
 };
 
 export const FREE_PLAN_LIMITS = {
@@ -14,6 +15,7 @@ export const FREE_PLAN_LIMITS = {
   customCharacters: 1,
   monthlyAiNotifications: 100,
   monthlyChats: 5,
+  notificationHistoryDays: 7,
 } as const satisfies PlanLimits;
 
 export const PRO_PLAN_LIMITS = {
@@ -22,6 +24,7 @@ export const PRO_PLAN_LIMITS = {
   customCharacters: 100,
   monthlyAiNotifications: 5000,
   monthlyChats: 500,
+  notificationHistoryDays: null,
 } as const satisfies PlanLimits;
 
 export function getPlanLimits(plan: Plan): PlanLimits {

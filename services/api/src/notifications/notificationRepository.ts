@@ -1,6 +1,7 @@
 import type { NotificationMessage, UsageQuota, UUID } from '@cueup/shared';
 
 export interface NotificationMessageRepository {
+  findById(id: UUID): Promise<NotificationMessage | undefined>;
   save(message: NotificationMessage): Promise<NotificationMessage>;
   listByUser(userId: UUID): Promise<NotificationMessage[]>;
 }
@@ -17,6 +18,10 @@ export class InMemoryNotificationMessageRepository implements NotificationMessag
     for (const message of initialMessages) {
       this.messages.set(message.id, message);
     }
+  }
+
+  async findById(id: UUID): Promise<NotificationMessage | undefined> {
+    return this.messages.get(id);
   }
 
   async save(message: NotificationMessage): Promise<NotificationMessage> {

@@ -57,6 +57,7 @@ function entitlement(activeCharacterPackIds: string[] = [], activeCharacters = 3
       customCharacters: 1,
       monthlyAiNotifications: 100,
       monthlyChats: 5,
+      notificationHistoryDays: 7,
     },
   };
 }

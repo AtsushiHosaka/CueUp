@@ -8,6 +8,7 @@ export type AuthProvider = 'apple' | 'google' | 'email';
 export type ReminderStatus = 'active' | 'completed' | 'snoozed' | 'deleted';
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
 export type CharacterType = 'built_in' | 'custom' | 'pack';
+export type CharacterSafetyReviewStatus = 'approved' | 'needs_review' | 'rejected';
 export type GenerationStatus = 'success' | 'fallback' | 'failed';
 export type NotificationJobStatus =
   | 'scheduled'
@@ -72,6 +73,8 @@ export type Character = Timestamped & {
   type: CharacterType;
   name: string;
   description?: string | null;
+  relationship?: string | null;
+  tone?: string | null;
   personaPrompt: string;
   strictness: number;
   warmth: number;
@@ -79,6 +82,8 @@ export type Character = Timestamped & {
   prohibitedStyle?: string[] | null;
   iconUrl?: string | null;
   packId?: UUID | null;
+  safetyReviewStatus?: CharacterSafetyReviewStatus;
+  safetyReviewReason?: string | null;
 };
 
 export type NotificationMessage = {

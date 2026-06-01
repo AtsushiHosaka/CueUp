@@ -6,6 +6,7 @@ export interface CharacterRepository {
   findById(id: UUID): Promise<Character | undefined>;
   listAll(): Promise<Character[]>;
   listCustomByOwner(userId: UUID): Promise<Character[]>;
+  save(character: Character): Promise<Character>;
 }
 
 export class InMemoryCharacterRepository implements CharacterRepository {
@@ -29,5 +30,10 @@ export class InMemoryCharacterRepository implements CharacterRepository {
     return [...this.characters.values()].filter(
       (character) => character.type === 'custom' && character.ownerUserId === userId,
     );
+  }
+
+  async save(character: Character): Promise<Character> {
+    this.characters.set(character.id, character);
+    return character;
   }
 }

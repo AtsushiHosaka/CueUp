@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { InMemoryCharacterRepository } from './characters/characterRepository.js';
+import { CustomCharacterService } from './characters/customCharacterService.js';
 import { InMemoryNotificationJobRepository } from './notifications/notificationJobRepository.js';
 import { NotificationJobService } from './notifications/notificationJobService.js';
 import { InMemoryReminderRepository } from './reminders/reminderRepository.js';
@@ -203,4 +205,76 @@ test('POST /v1/reminders/:id/snooze returns snoozed reminder and scheduled job',
   assert.equal(body.notificationJob.reminderId, 'reminder-1');
   assert.equal(body.notificationJob.scheduledFor, '2026-06-01T09:10:00.000Z');
   assert.equal(body.notificationJob.status, 'scheduled');
+});
+
+test('POST /v1/characters/custom creates an owner-scoped custom character', async () => {
+  const dependencies = {
+    reminders: new ReminderService(new InMemoryReminderRepository(), () => 'reminder-1'),
+    characters: new CustomCharacterService(new InMemoryCharacterRepository(), () => 'custom-1'),
+  };
+  const response = await routeRequest('POST', '/v1/characters/custom', 'localhost', testConfig, {
+    actor: { userId: 'alice', role: 'user' },
+    body: {
+      name: 'Deadline Navigator',
+      relationship: 'accountability partner',
+      tone: 'direct but kind',
+      strictness: 7,
+      warmth: 6,
+      catchphrases: ['Next small step'],
+      prohibitedStyle: ['personal insults'],
+      iconUrl: 'https://example.com/icon.png',
+    },
+    dependencies,
+    now: '2026-06-01T00:00:00.000Z',
+    plan: 'free',
+  });
+  const body = response.payload as {
+    character: { id: string; ownerUserId: string; personaPrompt: string };
+  };
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(body.character.id, 'custom-1');
+  assert.equal(body.character.ownerUserId, 'alice');
+  assert.equal(body.character.personaPrompt.includes('Deadline Navigator'), true);
+});
+
+test('PATCH /v1/characters/custom/:id maps safety review errors', async () => {
+  const repository = new InMemoryCharacterRepository([
+    {
+      id: 'custom-1',
+      ownerUserId: 'alice',
+      type: 'custom',
+      name: 'Deadline Navigator',
+      relationship: 'accountability partner',
+      tone: 'direct but kind',
+      personaPrompt: 'Original fictional character: Deadline Navigator',
+      strictness: 7,
+      warmth: 6,
+      createdAt: '2026-06-01T00:00:00.000Z',
+      updatedAt: '2026-06-01T00:00:00.000Z',
+    },
+  ]);
+  const dependencies = {
+    reminders: new ReminderService(new InMemoryReminderRepository(), () => 'reminder-1'),
+    characters: new CustomCharacterService(repository, () => 'unused'),
+  };
+  const response = await routeRequest(
+    'PATCH',
+    '/v1/characters/custom/custom-1',
+    'localhost',
+    testConfig,
+    {
+      actor: { userId: 'alice', role: 'user' },
+      body: {
+        tone: 'Taylor Swift style',
+      },
+      dependencies,
+      now: '2026-06-01T00:00:00.000Z',
+    },
+  );
+  const body = response.payload as { error: string; details: { reason: string } };
+
+  assert.equal(response.statusCode, 422);
+  assert.equal(body.error, 'safety_review_required');
+  assert.equal(body.details.reason, 'real_person_reference');
 });

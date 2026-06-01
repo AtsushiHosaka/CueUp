@@ -45,11 +45,13 @@ import {
   type SecondaryFlowState,
   type SettingsDestination,
 } from './domain/secondaryFlow';
+import { getUiText } from './i18n/uiText';
 
 const fixedNow = new Date('2026-06-01T00:00:00.000Z');
 
 export default function App() {
   const now = useMemo(() => fixedNow, []);
+  const copy = useMemo(() => getUiText('ja'), []);
   const [flow, setFlow] = useState<MainFlowState>(() => createInitialMainFlowState(now));
   const [secondary, setSecondary] = useState<SecondaryFlowState>(() =>
     createSecondaryFlowState(now.toISOString()),
@@ -974,7 +976,7 @@ export default function App() {
       <View style={styles.stack}>
         <View>
           <Text style={styles.kicker}>Settings</Text>
-          <Text style={styles.title}>設定</Text>
+          <Text style={styles.title}>{copy.settings.title}</Text>
         </View>
         {settings.selectedDetail !== undefined ? (
           <View style={styles.notice}>
@@ -994,7 +996,7 @@ export default function App() {
               </Text>
               <Text style={styles.meta}>{row.detail}</Text>
             </View>
-            <Text style={styles.meta}>Open</Text>
+            <Text style={styles.meta}>{copy.settings.open}</Text>
           </Pressable>
         ))}
       </View>
@@ -1065,16 +1067,20 @@ export default function App() {
       <ScrollView contentContainerStyle={styles.content}>{renderRoute()}</ScrollView>
       {flow.authenticated ? (
         <View style={styles.tabBar}>
-          <Tab label="Home" active={flow.route === 'home'} onPress={() => goTo('home')} />
-          <Tab label="History" active={flow.route === 'history'} onPress={() => goTo('history')} />
-          <Tab label="Chat" active={flow.route === 'chat'} onPress={() => goTo('chat')} />
+          <Tab label={copy.tabs.home} active={flow.route === 'home'} onPress={() => goTo('home')} />
           <Tab
-            label="Store"
+            label={copy.tabs.history}
+            active={flow.route === 'history'}
+            onPress={() => goTo('history')}
+          />
+          <Tab label={copy.tabs.chat} active={flow.route === 'chat'} onPress={() => goTo('chat')} />
+          <Tab
+            label={copy.tabs.store}
             active={flow.route === 'packStore' || flow.route === 'proUpsell'}
             onPress={() => goTo('packStore')}
           />
           <Tab
-            label="Settings"
+            label={copy.tabs.settings}
             active={flow.route === 'settings'}
             onPress={() => goTo('settings')}
           />

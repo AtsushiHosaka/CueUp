@@ -5,6 +5,8 @@ import { InMemoryCharacterRepository } from './characters/characterRepository.js
 import { CustomCharacterService } from './characters/customCharacterService.js';
 import { InMemoryNotificationJobRepository } from './notifications/notificationJobRepository.js';
 import { NotificationJobService } from './notifications/notificationJobService.js';
+import { InMemoryOrganizerRepository } from './organizer/organizerRepository.js';
+import { OrganizerService } from './organizer/organizerService.js';
 import { InMemoryReminderRepository } from './reminders/reminderRepository.js';
 import { ReminderService } from './reminders/reminderService.js';
 import { SnoozeService } from './reminders/snoozeService.js';
@@ -229,6 +231,118 @@ test('POST /v1/reminders/:id/snooze fails fast when snooze dependencies are miss
 
   assert.equal(response.statusCode, 500);
   assert.equal(body.error, 'internal_error');
+});
+
+test('GET /v1/folders requires an authenticated user', async () => {
+  const response = await routeRequest('GET', '/v1/folders', 'localhost', testConfig);
+  const body = response.payload as { error: string };
+
+  assert.equal(response.statusCode, 401);
+  assert.equal(body.error, 'authentication_required');
+});
+
+test('POST /v1/folders creates a folder for the authenticated user', async () => {
+  const reminderRepository = new InMemoryReminderRepository();
+  const dependencies = {
+    organizer: new OrganizerService(
+      new InMemoryOrganizerRepository(),
+      reminderRepository,
+      () => 'folder-1',
+    ),
+    reminders: new ReminderService(reminderRepository, () => 'generated-1'),
+  };
+  const response = await routeRequest('POST', '/v1/folders', 'localhost', testConfig, {
+    actor: { userId: 'alice', role: 'user' },
+    body: {
+      name: ' Work ',
+      color: '#335C67',
+    },
+    dependencies,
+    now: '2026-06-01T00:00:00.000Z',
+    plan: 'free',
+  });
+  const body = response.payload as { folder: { id: string; userId: string; name: string } };
+
+  assert.equal(response.statusCode, 201);
+  assert.equal(body.folder.id, 'folder-1');
+  assert.equal(body.folder.userId, 'alice');
+  assert.equal(body.folder.name, 'Work');
+});
+
+test('PUT /v1/reminders/:id/tags assigns tags used by smart lists', async () => {
+  const reminderRepository = new InMemoryReminderRepository([
+    {
+      id: 'reminder-1',
+      userId: 'alice',
+      title: 'Plan workout',
+      note: null,
+      scheduledAt: '2026-06-01T09:00:00.000Z',
+      recurrenceRule: null,
+      characterId: 'character-1',
+      folderId: null,
+      tagIds: [],
+      status: 'active',
+      createdAt: '2026-06-01T00:00:00.000Z',
+      updatedAt: '2026-06-01T00:00:00.000Z',
+    },
+  ]);
+  const dependencies = {
+    organizer: new OrganizerService(
+      new InMemoryOrganizerRepository({
+        tags: [
+          {
+            id: 'tag-work',
+            userId: 'alice',
+            name: '仕事',
+            color: null,
+            createdAt: '2026-06-01T00:00:00.000Z',
+            updatedAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+      }),
+      reminderRepository,
+      () => 'organizer-1',
+    ),
+    reminders: new ReminderService(reminderRepository, () => 'generated-1'),
+  };
+
+  const assignResponse = await routeRequest(
+    'PUT',
+    '/v1/reminders/reminder-1/tags',
+    'localhost',
+    testConfig,
+    {
+      actor: { userId: 'alice', role: 'user' },
+      body: {
+        tagIds: ['tag-work'],
+      },
+      dependencies,
+      now: '2026-06-01T01:00:00.000Z',
+    },
+  );
+  const smartListResponse = await routeRequest(
+    'GET',
+    '/v1/smart-lists/work',
+    'localhost',
+    testConfig,
+    {
+      actor: { userId: 'alice', role: 'user' },
+      dependencies,
+      now: '2026-06-01T00:00:00.000Z',
+    },
+  );
+  const smartListBody = smartListResponse.payload as { reminders: Array<{ id: string }> };
+
+  assert.equal(assignResponse.statusCode, 200);
+  assert.equal(
+    (await reminderRepository.findById('reminder-1'))?.updatedAt,
+    '2026-06-01T01:00:00.000Z',
+  );
+  assert.equal(smartListResponse.statusCode, 200);
+  assert.deepEqual(
+    smartListBody.reminders.map((reminder) => reminder.id),
+    ['reminder-1'],
+  );
 });
 
 test('POST /v1/characters/custom creates an owner-scoped custom character', async () => {

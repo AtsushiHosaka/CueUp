@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  FREE_PLAN_LIMITS,
   createEmptyUsageQuota,
   createEntitlementSnapshot,
   type Character,
@@ -56,12 +57,8 @@ function entitlement(customCharacters = 1) {
       }),
     }),
     limits: {
-      activeReminders: 20,
-      activeCharacters: 3,
+      ...FREE_PLAN_LIMITS,
       customCharacters,
-      monthlyAiNotifications: 100,
-      monthlyChats: 5,
-      notificationHistoryDays: 7,
     },
   };
 }

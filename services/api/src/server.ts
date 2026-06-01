@@ -14,7 +14,12 @@ import {
 } from 'node:http';
 import { randomUUID } from 'node:crypto';
 
+import { StaticAiTextProvider } from './ai/aiProvider.js';
+import { ChatServiceError } from './chat/chatErrors.js';
+import { InMemoryChatMessageRepository } from './chat/chatRepository.js';
+import { ChatService, type SendChatMessageInput } from './chat/chatService.js';
 import { CharacterServiceError } from './characters/characterErrors.js';
+import { CharacterCatalogService } from './characters/characterCatalogService.js';
 import { InMemoryCharacterRepository } from './characters/characterRepository.js';
 import { CustomCharacterService } from './characters/customCharacterService.js';
 import type { RuntimeConfig } from './config.js';
@@ -22,6 +27,7 @@ import { getRuntimeConfig } from './config.js';
 import type { Actor } from './data/accessControl.js';
 import { InMemoryNotificationJobRepository } from './notifications/notificationJobRepository.js';
 import { NotificationJobService } from './notifications/notificationJobService.js';
+import { InMemoryUsageQuotaRepository } from './notifications/notificationRepository.js';
 import { OrganizerServiceError } from './organizer/organizerErrors.js';
 import { InMemoryOrganizerRepository } from './organizer/organizerRepository.js';
 import {
@@ -55,6 +61,7 @@ type RouteContext = {
   plan?: Plan;
 };
 type ApiDependencies = {
+  chat?: ChatService;
   characters?: CustomCharacterService;
   organizer?: OrganizerService;
   reminders: ReminderService;
@@ -97,8 +104,19 @@ export function createApiDependencies(): ApiDependencies {
   const characters = new InMemoryCharacterRepository();
   const reminders = new InMemoryReminderRepository();
   const notificationJobs = new InMemoryNotificationJobRepository();
+  const quotas = new InMemoryUsageQuotaRepository();
 
   return {
+    chat: new ChatService(
+      new CharacterCatalogService(characters, reminders),
+      new InMemoryChatMessageRepository(),
+      quotas,
+      new StaticAiTextProvider({
+        text: '了解です。次の一歩を一緒に決めましょう。',
+        model: 'static-chat',
+      }),
+      randomUUID,
+    ),
     characters: new CustomCharacterService(characters, randomUUID),
     organizer: new OrganizerService(new InMemoryOrganizerRepository(), reminders, randomUUID),
     reminders: new ReminderService(reminders, randomUUID),
@@ -332,6 +350,54 @@ function mapOrganizerError(error: unknown): RouteResult {
   };
 }
 
+function mapChatError(error: unknown): RouteResult {
+  if (error instanceof AuthenticationRequiredError) {
+    return {
+      statusCode: 401,
+      payload: {
+        error: 'authentication_required',
+        message: 'x-user-id header is required',
+      },
+    };
+  }
+
+  if (!(error instanceof ChatServiceError)) {
+    return {
+      statusCode: 500,
+      payload: {
+        error: 'internal_error',
+        message: 'Unexpected server error',
+      },
+    };
+  }
+
+  const statusCodeByError = {
+    CHAT_ACCESS_DENIED: 403,
+    CHAT_CHARACTER_UNAVAILABLE: 402,
+    CHAT_FREE_LIMIT_EXCEEDED: 402,
+    CHAT_NOT_FOUND: 404,
+    CHAT_PROVIDER_UNAVAILABLE: 503,
+    CHAT_VALIDATION_ERROR: 400,
+  } as const satisfies Record<string, number>;
+  const apiErrorByCode = {
+    CHAT_ACCESS_DENIED: 'forbidden',
+    CHAT_CHARACTER_UNAVAILABLE: 'character_unavailable',
+    CHAT_FREE_LIMIT_EXCEEDED: 'plan_limit_exceeded',
+    CHAT_NOT_FOUND: 'not_found',
+    CHAT_PROVIDER_UNAVAILABLE: 'ai_unavailable',
+    CHAT_VALIDATION_ERROR: 'invalid_request',
+  } as const satisfies Record<string, string>;
+
+  return {
+    statusCode: statusCodeByError[error.code],
+    payload: {
+      error: apiErrorByCode[error.code],
+      message: error.message,
+      details: error.details as JsonValue,
+    },
+  };
+}
+
 async function handleReminderRequest(
   method: string,
   pathname: string,
@@ -543,15 +609,7 @@ function resolveNow(context: RouteContext): IsoDateTime {
 }
 
 function createRouteEntitlement(actor: Actor, plan: Plan, now: IsoDateTime) {
-  const user: User = {
-    id: actor.userId,
-    provider: 'email',
-    locale: 'en',
-    timezone: 'UTC',
-    plan,
-    createdAt: now,
-    updatedAt: now,
-  };
+  const user = createRouteUser(actor, plan, now);
 
   return createEntitlementSnapshot({
     user,
@@ -565,6 +623,18 @@ function createRouteEntitlement(actor: Actor, plan: Plan, now: IsoDateTime) {
     }),
     now: new Date(now),
   });
+}
+
+function createRouteUser(actor: Actor, plan: Plan, now: IsoDateTime): User {
+  return {
+    id: actor.userId,
+    provider: 'email',
+    locale: 'en',
+    timezone: 'UTC',
+    plan,
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 function resolveSnoozeService(dependencies: ApiDependencies): SnoozeService {
@@ -585,6 +655,14 @@ function resolveOrganizerService(dependencies: ApiDependencies): OrganizerServic
   }
 
   return dependencies.organizer;
+}
+
+function resolveChatService(dependencies: ApiDependencies): ChatService {
+  if (dependencies.chat === undefined) {
+    throw new Error('Chat dependencies are not configured');
+  }
+
+  return dependencies.chat;
 }
 
 function headerValue(headers: IncomingHttpHeaders | undefined, name: string): string | undefined {
@@ -623,6 +701,14 @@ function requireOrganizerObjectBody(body: unknown): Record<string, unknown> {
   return body;
 }
 
+function requireChatObjectBody(body: unknown): Record<string, unknown> {
+  if (!isRecord(body)) {
+    throw new ChatServiceError('CHAT_VALIDATION_ERROR', 'Request body must be a JSON object');
+  }
+
+  return body;
+}
+
 function requireTagIdsBody(body: unknown): string[] {
   const objectBody = requireOrganizerObjectBody(body);
   const tagIds = objectBody.tagIds;
@@ -653,6 +739,72 @@ async function routeReminderRequest(
     return await handleReminderRequest(method, pathname, context);
   } catch (error) {
     return mapReminderError(error);
+  }
+}
+
+async function routeChatRequest(
+  method: string,
+  pathname: string,
+  context: RouteContext,
+): Promise<RouteResult | undefined> {
+  const match = /^\/v1\/chats\/([^/]+)\/messages$/.exec(pathname);
+
+  if (match === null) {
+    return undefined;
+  }
+
+  const characterId = match[1];
+
+  if (characterId === undefined) {
+    return undefined;
+  }
+
+  const dependencies = context.dependencies ?? createApiDependencies();
+
+  try {
+    const actor = resolveActor(context);
+    const plan = resolvePlan(context);
+    const now = resolveNow(context);
+    const entitlement = createRouteEntitlement(actor, plan, now);
+    const chat = resolveChatService(dependencies);
+
+    if (method === 'GET') {
+      return {
+        statusCode: 200,
+        payload: {
+          messages: (await chat.listMessages({
+            actor,
+            characterId,
+            entitlement,
+          })) as JsonValue,
+        },
+      };
+    }
+
+    if (method === 'POST') {
+      const result = await chat.sendMessage({
+        actor,
+        user: createRouteUser(actor, plan, now),
+        characterId,
+        entitlement,
+        input: requireChatObjectBody(context.body) as SendChatMessageInput,
+        now: new Date(now),
+      });
+
+      return {
+        statusCode: 201,
+        payload: {
+          messages: result.messages as JsonValue,
+          quota: result.quota as JsonValue,
+          providerAttempted: result.providerAttempted,
+          reminderDraft: (result.reminderDraft ?? null) as JsonValue,
+        },
+      };
+    }
+
+    return undefined;
+  } catch (error) {
+    return mapChatError(error);
   }
 }
 
@@ -949,6 +1101,12 @@ export async function routeRequest(
 ): Promise<RouteResult> {
   const normalizedMethod = method.toUpperCase();
   const url = new URL(requestUrl, `http://${host}`);
+
+  const chatResult = await routeChatRequest(normalizedMethod, url.pathname, context);
+
+  if (chatResult !== undefined) {
+    return chatResult;
+  }
 
   const organizerResult = await routeOrganizerRequest(normalizedMethod, url, context);
 

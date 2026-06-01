@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { StaticAiTextProvider } from './ai/aiProvider.js';
+import { InMemoryChatMessageRepository } from './chat/chatRepository.js';
+import { ChatService } from './chat/chatService.js';
+import { CharacterCatalogService } from './characters/characterCatalogService.js';
 import { InMemoryCharacterRepository } from './characters/characterRepository.js';
 import { CustomCharacterService } from './characters/customCharacterService.js';
 import { InMemoryNotificationJobRepository } from './notifications/notificationJobRepository.js';
 import { NotificationJobService } from './notifications/notificationJobService.js';
+import { InMemoryUsageQuotaRepository } from './notifications/notificationRepository.js';
 import { InMemoryOrganizerRepository } from './organizer/organizerRepository.js';
 import { OrganizerService } from './organizer/organizerService.js';
 import { InMemoryReminderRepository } from './reminders/reminderRepository.js';
@@ -18,6 +23,51 @@ const testConfig = {
   aiProvider: 'disabled' as const,
   serverOnlyCredentialNames: ['OPENAI_API_KEY'],
 };
+
+function createChatDependencies(
+  params: {
+    provider?: StaticAiTextProvider;
+    chatMessageCount?: number;
+  } = {},
+) {
+  let id = 1;
+  const reminderRepository = new InMemoryReminderRepository();
+  const chatMessages = new InMemoryChatMessageRepository();
+  const quotas = new InMemoryUsageQuotaRepository(
+    params.chatMessageCount === undefined
+      ? []
+      : [
+          {
+            id: 'quota-existing',
+            userId: 'alice',
+            period: '2026-06',
+            aiNotificationCount: 0,
+            chatMessageCount: params.chatMessageCount,
+            createdAt: '2026-06-01T00:00:00.000Z',
+            updatedAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+  );
+
+  return {
+    chatMessages,
+    dependencies: {
+      chat: new ChatService(
+        new CharacterCatalogService(new InMemoryCharacterRepository(), reminderRepository),
+        chatMessages,
+        quotas,
+        params.provider ??
+          new StaticAiTextProvider({
+            text: 'Strict Boss: Start now. Pick the next concrete step.',
+            model: 'test-chat',
+          }),
+        () => `chat-${id++}`,
+      ),
+      reminders: new ReminderService(reminderRepository, () => 'reminder-1'),
+    },
+    quotas,
+  };
+}
 
 test('GET /health returns service status', async () => {
   const response = await routeRequest('GET', '/health', 'localhost', testConfig);
@@ -34,6 +84,124 @@ test('GET /v1/bootstrap returns free plan limits', async () => {
 
   assert.equal(response.statusCode, 200);
   assert.equal(body.planLimits.free.activeReminders, 20);
+});
+
+test('POST /v1/chats/:characterId/messages stores a character chat exchange', async () => {
+  const { dependencies } = createChatDependencies();
+  const response = await routeRequest(
+    'POST',
+    '/v1/chats/character-strict-boss/messages',
+    'localhost',
+    testConfig,
+    {
+      actor: { userId: 'alice', role: 'user' },
+      body: {
+        body: '企画書を明日の朝に思い出したい',
+        createReminderDraft: true,
+      },
+      dependencies,
+      now: '2026-06-01T09:00:00.000Z',
+      plan: 'free',
+    },
+  );
+  const body = response.payload as {
+    messages: Array<{ role: string; body: string }>;
+    quota: { chatMessageCount: number };
+    reminderDraft: { characterId: string; title: string };
+  };
+
+  assert.equal(response.statusCode, 201);
+  assert.deepEqual(
+    body.messages.map((message) => message.role),
+    ['system', 'user', 'assistant'],
+  );
+  assert.equal(body.messages[2]?.body, 'Strict Boss: Start now. Pick the next concrete step.');
+  assert.equal(body.quota.chatMessageCount, 1);
+  assert.equal(body.reminderDraft.characterId, 'character-strict-boss');
+  assert.equal(body.reminderDraft.title, '企画書を明日の朝に思い出したい');
+});
+
+test('GET /v1/chats/:characterId/messages returns owned chat history', async () => {
+  const { dependencies } = createChatDependencies();
+
+  await routeRequest('POST', '/v1/chats/character-strict-boss/messages', 'localhost', testConfig, {
+    actor: { userId: 'alice', role: 'user' },
+    body: {
+      body: '集中したい',
+    },
+    dependencies,
+    now: '2026-06-01T09:00:00.000Z',
+    plan: 'free',
+  });
+
+  const response = await routeRequest(
+    'GET',
+    '/v1/chats/character-strict-boss/messages',
+    'localhost',
+    testConfig,
+    {
+      actor: { userId: 'alice', role: 'user' },
+      dependencies,
+      now: '2026-06-01T09:01:00.000Z',
+      plan: 'free',
+    },
+  );
+  const body = response.payload as { messages: Array<{ role: string }> };
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(
+    body.messages.map((message) => message.role),
+    ['system', 'user', 'assistant'],
+  );
+});
+
+test('POST /v1/chats/:characterId/messages blocks free monthly chat limit', async () => {
+  const { dependencies } = createChatDependencies({ chatMessageCount: 5 });
+  const response = await routeRequest(
+    'POST',
+    '/v1/chats/character-strict-boss/messages',
+    'localhost',
+    testConfig,
+    {
+      actor: { userId: 'alice', role: 'user' },
+      body: {
+        body: 'もう一回相談したい',
+      },
+      dependencies,
+      now: '2026-06-01T09:00:00.000Z',
+      plan: 'free',
+    },
+  );
+  const body = response.payload as { error: string; details: { upgradeTarget: string } };
+
+  assert.equal(response.statusCode, 402);
+  assert.equal(body.error, 'plan_limit_exceeded');
+  assert.equal(body.details.upgradeTarget, 'pro');
+});
+
+test('POST /v1/chats/:characterId/messages reports AI failures to the UI', async () => {
+  const { dependencies } = createChatDependencies({
+    provider: new StaticAiTextProvider(new Error('provider down')),
+  });
+  const response = await routeRequest(
+    'POST',
+    '/v1/chats/character-strict-boss/messages',
+    'localhost',
+    testConfig,
+    {
+      actor: { userId: 'alice', role: 'user' },
+      body: {
+        body: '集中できない',
+      },
+      dependencies,
+      now: '2026-06-01T09:00:00.000Z',
+      plan: 'free',
+    },
+  );
+  const body = response.payload as { error: string };
+
+  assert.equal(response.statusCode, 503);
+  assert.equal(body.error, 'ai_unavailable');
 });
 
 test('POST /v1/reminders creates a reminder for the authenticated user', async () => {

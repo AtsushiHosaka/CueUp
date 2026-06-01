@@ -17,6 +17,8 @@ import { randomUUID } from 'node:crypto';
 import type { RuntimeConfig } from './config.js';
 import { getRuntimeConfig } from './config.js';
 import type { Actor } from './data/accessControl.js';
+import { InMemoryNotificationJobRepository } from './notifications/notificationJobRepository.js';
+import { NotificationJobService } from './notifications/notificationJobService.js';
 import { ReminderServiceError } from './reminders/reminderErrors.js';
 import { InMemoryReminderRepository } from './reminders/reminderRepository.js';
 import {
@@ -24,6 +26,7 @@ import {
   type CreateReminderInput,
   type UpdateReminderInput,
 } from './reminders/reminderService.js';
+import { SnoozeService, type SnoozeReminderInput } from './reminders/snoozeService.js';
 
 type JsonValue = boolean | number | string | null | JsonValue[] | { [key: string]: JsonValue };
 type RouteResult = {
@@ -40,6 +43,7 @@ type RouteContext = {
 };
 type ApiDependencies = {
   reminders: ReminderService;
+  snoozes?: SnoozeService;
 };
 
 class AuthenticationRequiredError extends Error {
@@ -75,8 +79,12 @@ export function createServer(
 }
 
 export function createApiDependencies(): ApiDependencies {
+  const reminders = new InMemoryReminderRepository();
+  const notificationJobs = new InMemoryNotificationJobRepository();
+
   return {
-    reminders: new ReminderService(new InMemoryReminderRepository(), randomUUID),
+    reminders: new ReminderService(reminders, randomUUID),
+    snoozes: new SnoozeService(reminders, new NotificationJobService(notificationJobs, randomUUID)),
   };
 }
 
@@ -184,6 +192,7 @@ function mapReminderError(error: unknown): RouteResult {
     REMINDER_FREE_LIMIT_EXCEEDED: 402,
     REMINDER_NOT_FOUND: 404,
     REMINDER_PERSISTENCE_UNAVAILABLE: 503,
+    REMINDER_SNOOZE_LIMIT_EXCEEDED: 429,
     REMINDER_VALIDATION_ERROR: 400,
   } as const satisfies Record<string, number>;
   const apiErrorByCode = {
@@ -191,6 +200,7 @@ function mapReminderError(error: unknown): RouteResult {
     REMINDER_FREE_LIMIT_EXCEEDED: 'plan_limit_exceeded',
     REMINDER_NOT_FOUND: 'not_found',
     REMINDER_PERSISTENCE_UNAVAILABLE: 'service_unavailable',
+    REMINDER_SNOOZE_LIMIT_EXCEEDED: 'snooze_limit_exceeded',
     REMINDER_VALIDATION_ERROR: 'invalid_request',
   } as const satisfies Record<string, string>;
 
@@ -238,7 +248,7 @@ async function handleReminderRequest(
       };
     }
 
-    const match = /^\/v1\/reminders\/([^/]+)(?:\/(complete))?$/.exec(pathname);
+    const match = /^\/v1\/reminders\/([^/]+)(?:\/(complete|snooze))?$/.exec(pathname);
 
     if (match === null) {
       return undefined;
@@ -249,6 +259,25 @@ async function handleReminderRequest(
 
     if (reminderId === undefined) {
       return undefined;
+    }
+
+    if (action === 'snooze' && method === 'POST') {
+      const result = await resolveSnoozeService(dependencies).snoozeReminder({
+        actor,
+        id: reminderId,
+        input: requireObjectBody(context.body) as SnoozeReminderInput,
+        now,
+      });
+
+      return {
+        statusCode: 200,
+        payload: {
+          reminder: result.reminder as JsonValue,
+          notificationJob: result.notificationJob as JsonValue,
+          message: (result.message ?? null) as JsonValue,
+          quota: (result.quota ?? null) as JsonValue,
+        },
+      };
     }
 
     if (action === 'complete' && method === 'POST') {
@@ -365,6 +394,10 @@ function createRouteEntitlement(actor: Actor, plan: Plan, now: IsoDateTime) {
     }),
     now: new Date(now),
   });
+}
+
+function resolveSnoozeService(dependencies: ApiDependencies): SnoozeService {
+  return dependencies.snoozes ?? createApiDependencies().snoozes!;
 }
 
 function headerValue(headers: IncomingHttpHeaders | undefined, name: string): string | undefined {

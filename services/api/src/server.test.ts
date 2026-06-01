@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { InMemoryNotificationJobRepository } from './notifications/notificationJobRepository.js';
+import { NotificationJobService } from './notifications/notificationJobService.js';
 import { InMemoryReminderRepository } from './reminders/reminderRepository.js';
 import { ReminderService } from './reminders/reminderService.js';
+import { SnoozeService } from './reminders/snoozeService.js';
 import { routeRequest } from './server.js';
 
 const testConfig = {
@@ -147,4 +150,57 @@ test('POST /v1/reminders/:id/complete returns completed and next reminder envelo
   assert.equal(body.reminder.completedAt, '2026-06-01T10:00:00.000Z');
   assert.equal(body.nextReminder.id, 'generated-1');
   assert.equal(body.nextReminder.scheduledAt, '2026-06-02T09:00:00.000Z');
+});
+
+test('POST /v1/reminders/:id/snooze returns snoozed reminder and scheduled job', async () => {
+  const reminderRepository = new InMemoryReminderRepository([
+    {
+      id: 'reminder-1',
+      userId: 'alice',
+      title: 'Plan workout',
+      note: null,
+      scheduledAt: '2026-06-01T09:00:00.000Z',
+      recurrenceRule: null,
+      characterId: 'character-1',
+      folderId: null,
+      tagIds: [],
+      status: 'active',
+      createdAt: '2026-06-01T00:00:00.000Z',
+      updatedAt: '2026-06-01T00:00:00.000Z',
+    },
+  ]);
+  const dependencies = {
+    reminders: new ReminderService(reminderRepository, () => 'generated-1'),
+    snoozes: new SnoozeService(
+      reminderRepository,
+      new NotificationJobService(new InMemoryNotificationJobRepository(), () => 'job-1'),
+    ),
+  };
+  const response = await routeRequest(
+    'POST',
+    '/v1/reminders/reminder-1/snooze',
+    'localhost',
+    testConfig,
+    {
+      actor: { userId: 'alice', role: 'user' },
+      body: {
+        durationMinutes: 10,
+      },
+      dependencies,
+      now: '2026-06-01T09:00:00.000Z',
+    },
+  );
+  const body = response.payload as {
+    reminder: { id: string; status: string; snoozedUntil: string; snoozeCount: number };
+    notificationJob: { reminderId: string; scheduledFor: string; status: string };
+  };
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(body.reminder.id, 'reminder-1');
+  assert.equal(body.reminder.status, 'snoozed');
+  assert.equal(body.reminder.snoozedUntil, '2026-06-01T09:10:00.000Z');
+  assert.equal(body.reminder.snoozeCount, 1);
+  assert.equal(body.notificationJob.reminderId, 'reminder-1');
+  assert.equal(body.notificationJob.scheduledFor, '2026-06-01T09:10:00.000Z');
+  assert.equal(body.notificationJob.status, 'scheduled');
 });

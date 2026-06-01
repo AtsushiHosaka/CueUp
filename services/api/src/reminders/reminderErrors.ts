@@ -2,6 +2,7 @@ export type ReminderErrorCode =
   | 'REMINDER_ACCESS_DENIED'
   | 'REMINDER_FREE_LIMIT_EXCEEDED'
   | 'REMINDER_NOT_FOUND'
+  | 'REMINDER_PERSISTENCE_UNAVAILABLE'
   | 'REMINDER_VALIDATION_ERROR';
 
 export class ReminderServiceError extends Error {
@@ -26,5 +27,12 @@ export function freeLimitExceeded(limit: number): ReminderServiceError {
       limit,
       upgradeTarget: 'pro',
     },
+  );
+}
+
+export function persistenceUnavailable(): ReminderServiceError {
+  return new ReminderServiceError(
+    'REMINDER_PERSISTENCE_UNAVAILABLE',
+    'Reminder storage is unavailable',
   );
 }

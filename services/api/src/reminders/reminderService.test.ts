@@ -10,7 +10,7 @@ import {
 
 import type { Actor } from '../data/accessControl.js';
 import { ReminderServiceError } from './reminderErrors.js';
-import { InMemoryReminderRepository } from './reminderRepository.js';
+import { InMemoryReminderRepository, type ReminderRepository } from './reminderRepository.js';
 import { ReminderService } from './reminderService.js';
 
 const now = '2026-06-01T09:00:00.000Z';
@@ -89,6 +89,7 @@ test('createReminder validates input and stores an owned active reminder', async
       title: '  Finish proposal  ',
       scheduledAt,
       characterId: 'character-1',
+      tagIds: ['tag-1'],
       recurrenceRule: { frequency: 'daily', interval: 1 },
     },
   });
@@ -97,6 +98,7 @@ test('createReminder validates input and stores an owned active reminder', async
   assert.equal(reminder.userId, alice.userId);
   assert.equal(reminder.title, 'Finish proposal');
   assert.equal(reminder.status, 'active');
+  assert.deepEqual(reminder.tagIds, ['tag-1']);
   assert.deepEqual(reminder.recurrenceRule, { frequency: 'daily', interval: 1 });
 });
 
@@ -181,4 +183,23 @@ test('listReminders excludes deleted records and sorts by scheduledAt', async ()
     (await service.listReminders(alice)).map((reminder) => reminder.id),
     ['earlier', 'later'],
   );
+});
+
+test('repository failures are returned as service unavailable errors', async () => {
+  const failingRepository: ReminderRepository = {
+    async findById() {
+      throw new Error('database unavailable');
+    },
+    async listByUser() {
+      throw new Error('database unavailable');
+    },
+    async save() {
+      throw new Error('database unavailable');
+    },
+  };
+  const service = new ReminderService(failingRepository, () => 'generated-1');
+
+  await assert.rejects(() => service.listReminders(alice), {
+    code: 'REMINDER_PERSISTENCE_UNAVAILABLE',
+  });
 });

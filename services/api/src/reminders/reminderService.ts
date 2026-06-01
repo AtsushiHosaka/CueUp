@@ -14,7 +14,12 @@ import {
   softDeleteRecord,
   type Actor,
 } from '../data/accessControl.js';
-import { freeLimitExceeded, ReminderServiceError, validationError } from './reminderErrors.js';
+import {
+  freeLimitExceeded,
+  persistenceUnavailable,
+  ReminderServiceError,
+  validationError,
+} from './reminderErrors.js';
 import type { ReminderRepository } from './reminderRepository.js';
 import { getNextScheduledAt, validateRecurrenceRule } from './recurrence.js';
 
@@ -25,6 +30,7 @@ export type CreateReminderInput = {
   recurrenceRule?: ReminderRecurrenceRule | null;
   characterId: UUID;
   folderId?: UUID | null;
+  tagIds?: UUID[];
 };
 
 export type UpdateReminderInput = Partial<CreateReminderInput>;
@@ -43,7 +49,7 @@ export class ReminderService {
   ) {}
 
   async listReminders(actor: Actor): Promise<Reminder[]> {
-    const records = await this.repository.listByUser(actor.userId);
+    const records = await this.readRepository(() => this.repository.listByUser(actor.userId));
 
     return filterAccessibleRecords(actor, records).sort((a, b) =>
       a.scheduledAt.localeCompare(b.scheduledAt),
@@ -51,7 +57,11 @@ export class ReminderService {
   }
 
   async getReminder(actor: Actor, id: UUID): Promise<Reminder> {
-    return this.requireAccessible(actor, await this.repository.findById(id), 'read');
+    return this.requireAccessible(
+      actor,
+      await this.readRepository(() => this.repository.findById(id)),
+      'read',
+    );
   }
 
   async createReminder(params: {
@@ -75,7 +85,7 @@ export class ReminderService {
       now: params.now,
     });
 
-    return this.repository.save(reminder);
+    return this.writeRepository(() => this.repository.save(reminder));
   }
 
   async updateReminder(params: {
@@ -99,29 +109,34 @@ export class ReminderService {
         characterId: params.input.characterId ?? existing.characterId,
         folderId:
           params.input.folderId === undefined ? (existing.folderId ?? null) : params.input.folderId,
+        tagIds: params.input.tagIds === undefined ? (existing.tagIds ?? []) : params.input.tagIds,
       },
       now: existing.createdAt,
     });
 
-    return this.repository.save({
-      ...existing,
-      ...reminder,
-      createdAt: existing.createdAt,
-      updatedAt: params.now,
-      completedAt: existing.completedAt ?? null,
-      deletedAt: existing.deletedAt ?? null,
-      status: existing.status,
-    });
+    return this.writeRepository(() =>
+      this.repository.save({
+        ...existing,
+        ...reminder,
+        createdAt: existing.createdAt,
+        updatedAt: params.now,
+        completedAt: existing.completedAt ?? null,
+        deletedAt: existing.deletedAt ?? null,
+        status: existing.status,
+      }),
+    );
   }
 
   async deleteReminder(params: { actor: Actor; id: UUID; now: IsoDateTime }): Promise<Reminder> {
     const existing = await this.getReminder(params.actor, params.id);
     const deleted = softDeleteRecord(params.actor, existing, params.now);
 
-    return this.repository.save({
-      ...deleted,
-      updatedAt: params.now,
-    });
+    return this.writeRepository(() =>
+      this.repository.save({
+        ...deleted,
+        updatedAt: params.now,
+      }),
+    );
   }
 
   async completeReminder(params: {
@@ -130,30 +145,50 @@ export class ReminderService {
     now: IsoDateTime;
   }): Promise<CompleteReminderResult> {
     const existing = await this.getReminder(params.actor, params.id);
-    const completed = await this.repository.save({
-      ...existing,
-      status: 'completed',
-      completedAt: params.now,
-      updatedAt: params.now,
-    });
+    const completed = await this.writeRepository(() =>
+      this.repository.save({
+        ...existing,
+        status: 'completed',
+        completedAt: params.now,
+        updatedAt: params.now,
+      }),
+    );
     const recurrenceRule = validateRecurrenceRule(existing.recurrenceRule);
 
     if (recurrenceRule === null) {
       return { completed };
     }
 
-    const nextReminder = await this.repository.save({
-      ...existing,
-      id: this.idFactory(),
-      status: 'active',
-      scheduledAt: getNextScheduledAt(existing.scheduledAt, recurrenceRule),
-      completedAt: null,
-      deletedAt: null,
-      createdAt: params.now,
-      updatedAt: params.now,
-    });
+    const nextReminder = await this.writeRepository(() =>
+      this.repository.save({
+        ...existing,
+        id: this.idFactory(),
+        status: 'active',
+        scheduledAt: getNextScheduledAt(existing.scheduledAt, recurrenceRule),
+        completedAt: null,
+        deletedAt: null,
+        createdAt: params.now,
+        updatedAt: params.now,
+      }),
+    );
 
     return { completed, nextReminder };
+  }
+
+  private async readRepository<TResult>(operation: () => Promise<TResult>): Promise<TResult> {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error instanceof ReminderServiceError) {
+        throw error;
+      }
+
+      throw persistenceUnavailable();
+    }
+  }
+
+  private async writeRepository<TResult>(operation: () => Promise<TResult>): Promise<TResult> {
+    return this.readRepository(operation);
   }
 
   private requireAccessible(
@@ -183,17 +218,20 @@ function buildReminder(params: {
   input: CreateReminderInput;
   now: IsoDateTime;
 }): Reminder {
-  const title = params.input.title.trim();
+  const title = validateRequiredString(params.input.title, 'title').trim();
 
   if (title.length === 0) {
     throw validationError('Reminder title is required', 'title');
   }
 
-  if (params.input.characterId.trim().length === 0) {
+  const characterId = validateRequiredString(params.input.characterId, 'characterId').trim();
+
+  if (characterId.length === 0) {
     throw validationError('Reminder characterId is required', 'characterId');
   }
 
-  const scheduledAt = new Date(params.input.scheduledAt);
+  const scheduledAtValue = validateRequiredString(params.input.scheduledAt, 'scheduledAt');
+  const scheduledAt = new Date(scheduledAtValue);
   const now = new Date(params.now);
 
   if (Number.isNaN(scheduledAt.getTime())) {
@@ -208,13 +246,68 @@ function buildReminder(params: {
     id: params.id,
     userId: params.userId,
     title,
-    note: params.input.note ?? null,
+    note: validateOptionalString(params.input.note, 'note'),
     scheduledAt: scheduledAt.toISOString(),
     recurrenceRule: validateRecurrenceRule(params.input.recurrenceRule),
-    characterId: params.input.characterId,
-    folderId: params.input.folderId ?? null,
+    characterId,
+    folderId: validateOptionalId(params.input.folderId, 'folderId'),
+    tagIds: validateTagIds(params.input.tagIds),
     status: 'active',
     createdAt: params.now,
     updatedAt: params.now,
   };
+}
+
+function validateRequiredString(value: unknown, field: string): string {
+  if (typeof value !== 'string') {
+    throw validationError(`${field} is required`, field);
+  }
+
+  return value;
+}
+
+function validateOptionalString(value: unknown, field: string): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    throw validationError(`${field} must be a string`, field);
+  }
+
+  return value.trim().length === 0 ? null : value.trim();
+}
+
+function validateOptionalId(value: unknown, field: string): UUID | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const id = validateRequiredString(value, field).trim();
+
+  if (id.length === 0) {
+    throw validationError(`${field} cannot be empty`, field);
+  }
+
+  return id;
+}
+
+function validateTagIds(value: unknown): UUID[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  if (!Array.isArray(value)) {
+    throw validationError('tagIds must be an array', 'tagIds');
+  }
+
+  return value.map((tagId) => {
+    const normalizedTagId = validateRequiredString(tagId, 'tagIds').trim();
+
+    if (normalizedTagId.length === 0) {
+      throw validationError('tagIds cannot contain empty ids', 'tagIds');
+    }
+
+    return normalizedTagId;
+  });
 }

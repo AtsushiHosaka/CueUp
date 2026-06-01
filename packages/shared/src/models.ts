@@ -49,6 +49,7 @@ export type Reminder = Timestamped &
     recurrenceRule?: ReminderRecurrenceRule | null;
     characterId: UUID;
     folderId?: UUID | null;
+    tagIds?: UUID[];
     status: ReminderStatus;
     completedAt?: IsoDateTime | null;
   };

@@ -6,6 +6,7 @@ export type JsonObject = Record<string, unknown>;
 
 export type AuthProvider = 'apple' | 'google' | 'email';
 export type ReminderStatus = 'active' | 'completed' | 'snoozed' | 'deleted';
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
 export type CharacterType = 'built_in' | 'custom' | 'pack';
 export type GenerationStatus = 'success' | 'fallback' | 'failed';
 export type BillingPlatform = 'app_store' | 'google_play';
@@ -20,6 +21,11 @@ export type Timestamped = {
 
 export type SoftDeletable = {
   deletedAt?: IsoDateTime | null;
+};
+
+export type ReminderRecurrenceRule = {
+  frequency: RecurrenceFrequency;
+  interval: number;
 };
 
 export type User = Timestamped &
@@ -40,7 +46,7 @@ export type Reminder = Timestamped &
     title: string;
     note?: string | null;
     scheduledAt: IsoDateTime;
-    recurrenceRule?: JsonObject | null;
+    recurrenceRule?: ReminderRecurrenceRule | null;
     characterId: UUID;
     folderId?: UUID | null;
     tagIds?: UUID[];

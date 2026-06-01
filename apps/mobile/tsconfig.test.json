@@ -7,5 +7,5 @@
     "rootDir": ".",
     "types": ["node"]
   },
-  "include": ["src/domain/**/*.ts", "test/**/*.test.ts"]
+  "include": ["src/auth/**/*.ts", "src/domain/**/*.ts", "test/**/*.test.ts"]
 }

@@ -9,7 +9,7 @@
     "ios": "expo start --ios",
     "android": "expo start --android",
     "typecheck": "npm run build -w @cueup/shared && tsc --noEmit -p tsconfig.json",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/**/*.test.js"
+    "test": "tsc -p tsconfig.test.json && node ../../scripts/run-node-tests.mjs dist-test"
   },
   "dependencies": {
     "@cueup/shared": "0.1.0",

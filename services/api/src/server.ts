@@ -22,6 +22,16 @@ import { getRuntimeConfig } from './config.js';
 import type { Actor } from './data/accessControl.js';
 import { InMemoryNotificationJobRepository } from './notifications/notificationJobRepository.js';
 import { NotificationJobService } from './notifications/notificationJobService.js';
+import { OrganizerServiceError } from './organizer/organizerErrors.js';
+import { InMemoryOrganizerRepository } from './organizer/organizerRepository.js';
+import {
+  OrganizerService,
+  type CreateFolderInput,
+  type CreateTagInput,
+  type SmartListKind,
+  type UpdateFolderInput,
+  type UpdateTagInput,
+} from './organizer/organizerService.js';
 import { ReminderServiceError } from './reminders/reminderErrors.js';
 import { InMemoryReminderRepository } from './reminders/reminderRepository.js';
 import {
@@ -46,6 +56,7 @@ type RouteContext = {
 };
 type ApiDependencies = {
   characters?: CustomCharacterService;
+  organizer?: OrganizerService;
   reminders: ReminderService;
   snoozes?: SnoozeService;
 };
@@ -89,6 +100,7 @@ export function createApiDependencies(): ApiDependencies {
 
   return {
     characters: new CustomCharacterService(characters, randomUUID),
+    organizer: new OrganizerService(new InMemoryOrganizerRepository(), reminders, randomUUID),
     reminders: new ReminderService(reminders, randomUUID),
     snoozes: new SnoozeService(reminders, new NotificationJobService(notificationJobs, randomUUID)),
   };
@@ -260,6 +272,54 @@ function mapCharacterError(error: unknown): RouteResult {
     CHARACTER_SAFETY_REVIEW_REQUIRED: 'safety_review_required',
     CHARACTER_SELECTION_LIMIT_EXCEEDED: 'plan_limit_exceeded',
     CHARACTER_VALIDATION_ERROR: 'invalid_request',
+  } as const satisfies Record<string, string>;
+
+  return {
+    statusCode: statusCodeByError[error.code],
+    payload: {
+      error: apiErrorByCode[error.code],
+      message: error.message,
+      details: error.details as JsonValue,
+    },
+  };
+}
+
+function mapOrganizerError(error: unknown): RouteResult {
+  if (error instanceof AuthenticationRequiredError) {
+    return {
+      statusCode: 401,
+      payload: {
+        error: 'authentication_required',
+        message: 'x-user-id header is required',
+      },
+    };
+  }
+
+  if (!(error instanceof OrganizerServiceError)) {
+    return {
+      statusCode: 500,
+      payload: {
+        error: 'internal_error',
+        message: 'Unexpected server error',
+      },
+    };
+  }
+
+  const statusCodeByError = {
+    ORGANIZER_ACCESS_DENIED: 403,
+    ORGANIZER_DUPLICATE_NAME: 409,
+    ORGANIZER_FOLDER_LIMIT_EXCEEDED: 402,
+    ORGANIZER_NOT_FOUND: 404,
+    ORGANIZER_TAG_LIMIT_EXCEEDED: 402,
+    ORGANIZER_VALIDATION_ERROR: 400,
+  } as const satisfies Record<string, number>;
+  const apiErrorByCode = {
+    ORGANIZER_ACCESS_DENIED: 'forbidden',
+    ORGANIZER_DUPLICATE_NAME: 'duplicate_name',
+    ORGANIZER_FOLDER_LIMIT_EXCEEDED: 'plan_limit_exceeded',
+    ORGANIZER_NOT_FOUND: 'not_found',
+    ORGANIZER_TAG_LIMIT_EXCEEDED: 'plan_limit_exceeded',
+    ORGANIZER_VALIDATION_ERROR: 'invalid_request',
   } as const satisfies Record<string, string>;
 
   return {
@@ -519,6 +579,14 @@ function resolveCustomCharacterService(dependencies: ApiDependencies): CustomCha
   return dependencies.characters ?? createApiDependencies().characters!;
 }
 
+function resolveOrganizerService(dependencies: ApiDependencies): OrganizerService {
+  if (dependencies.organizer === undefined) {
+    throw new Error('Organizer dependencies are not configured');
+  }
+
+  return dependencies.organizer;
+}
+
 function headerValue(headers: IncomingHttpHeaders | undefined, name: string): string | undefined {
   const value = headers?.[name];
 
@@ -542,6 +610,34 @@ function requireObjectBody(body: unknown): Record<string, unknown> {
   }
 
   return body;
+}
+
+function requireOrganizerObjectBody(body: unknown): Record<string, unknown> {
+  if (!isRecord(body)) {
+    throw new OrganizerServiceError(
+      'ORGANIZER_VALIDATION_ERROR',
+      'Request body must be a JSON object',
+    );
+  }
+
+  return body;
+}
+
+function requireTagIdsBody(body: unknown): string[] {
+  const objectBody = requireOrganizerObjectBody(body);
+  const tagIds = objectBody.tagIds;
+
+  if (!Array.isArray(tagIds) || !tagIds.every((tagId) => typeof tagId === 'string')) {
+    throw new OrganizerServiceError(
+      'ORGANIZER_VALIDATION_ERROR',
+      'tagIds must be an array of tag IDs',
+      {
+        field: 'tagIds',
+      },
+    );
+  }
+
+  return tagIds;
 }
 
 async function routeReminderRequest(
@@ -576,6 +672,274 @@ async function routeCharacterRequest(
   }
 }
 
+async function routeOrganizerRequest(
+  method: string,
+  url: URL,
+  context: RouteContext,
+): Promise<RouteResult | undefined> {
+  if (!isOrganizerPath(url.pathname)) {
+    return undefined;
+  }
+
+  const dependencies = context.dependencies ?? createApiDependencies();
+
+  try {
+    const actor = resolveActor(context);
+    const plan = resolvePlan(context);
+    const now = resolveNow(context);
+    const organizer = resolveOrganizerService(dependencies);
+
+    if (url.pathname === '/v1/folders' && method === 'GET') {
+      return {
+        statusCode: 200,
+        payload: {
+          folders: (await organizer.listFolders(actor)) as JsonValue,
+        },
+      };
+    }
+
+    if (url.pathname === '/v1/folders' && method === 'POST') {
+      return {
+        statusCode: 201,
+        payload: {
+          folder: (await organizer.createFolder({
+            actor,
+            entitlement: createRouteEntitlement(actor, plan, now),
+            input: requireOrganizerObjectBody(context.body) as CreateFolderInput,
+            now,
+          })) as JsonValue,
+        },
+      };
+    }
+
+    const folderMatch = /^\/v1\/folders\/([^/]+)$/.exec(url.pathname);
+
+    if (folderMatch !== null) {
+      return handleFolderMemberRequest(method, folderMatch[1], context, actor, now, organizer);
+    }
+
+    if (url.pathname === '/v1/tags' && method === 'GET') {
+      return {
+        statusCode: 200,
+        payload: {
+          tags: (await organizer.listTags(actor)) as JsonValue,
+        },
+      };
+    }
+
+    if (url.pathname === '/v1/tags' && method === 'POST') {
+      return {
+        statusCode: 201,
+        payload: {
+          tag: (await organizer.createTag({
+            actor,
+            entitlement: createRouteEntitlement(actor, plan, now),
+            input: requireOrganizerObjectBody(context.body) as CreateTagInput,
+            now,
+          })) as JsonValue,
+        },
+      };
+    }
+
+    const tagMatch = /^\/v1\/tags\/([^/]+)$/.exec(url.pathname);
+
+    if (tagMatch !== null) {
+      return handleTagMemberRequest(method, tagMatch[1], context, actor, now, organizer);
+    }
+
+    const reminderTagsMatch = /^\/v1\/reminders\/([^/]+)\/tags$/.exec(url.pathname);
+
+    if (reminderTagsMatch !== null) {
+      return handleReminderTagsRequest(
+        method,
+        reminderTagsMatch[1],
+        context,
+        actor,
+        now,
+        organizer,
+      );
+    }
+
+    const smartListMatch = /^\/v1\/smart-lists\/([^/]+)$/.exec(url.pathname);
+
+    if (smartListMatch !== null && method === 'GET') {
+      return {
+        statusCode: 200,
+        payload: {
+          reminders: (await organizer.listSmartList({
+            actor,
+            kind: parseSmartListKind(smartListMatch[1]),
+            now: new Date(now),
+            characterId: url.searchParams.get('characterId') ?? undefined,
+            folderId: url.searchParams.get('folderId') ?? undefined,
+            tagId: url.searchParams.get('tagId') ?? undefined,
+          })) as JsonValue,
+        },
+      };
+    }
+
+    return undefined;
+  } catch (error) {
+    return mapOrganizerError(error);
+  }
+}
+
+async function handleFolderMemberRequest(
+  method: string,
+  folderId: string | undefined,
+  context: RouteContext,
+  actor: Actor,
+  now: IsoDateTime,
+  organizer: OrganizerService,
+): Promise<RouteResult | undefined> {
+  if (folderId === undefined) {
+    return undefined;
+  }
+
+  if (method === 'PATCH') {
+    return {
+      statusCode: 200,
+      payload: {
+        folder: (await organizer.updateFolder({
+          actor,
+          id: folderId,
+          input: requireOrganizerObjectBody(context.body) as UpdateFolderInput,
+          now,
+        })) as JsonValue,
+      },
+    };
+  }
+
+  if (method === 'DELETE') {
+    return {
+      statusCode: 200,
+      payload: {
+        folder: (await organizer.deleteFolder({
+          actor,
+          id: folderId,
+          now,
+        })) as JsonValue,
+      },
+    };
+  }
+
+  return undefined;
+}
+
+async function handleTagMemberRequest(
+  method: string,
+  tagId: string | undefined,
+  context: RouteContext,
+  actor: Actor,
+  now: IsoDateTime,
+  organizer: OrganizerService,
+): Promise<RouteResult | undefined> {
+  if (tagId === undefined) {
+    return undefined;
+  }
+
+  if (method === 'PATCH') {
+    return {
+      statusCode: 200,
+      payload: {
+        tag: (await organizer.updateTag({
+          actor,
+          id: tagId,
+          input: requireOrganizerObjectBody(context.body) as UpdateTagInput,
+          now,
+        })) as JsonValue,
+      },
+    };
+  }
+
+  if (method === 'DELETE') {
+    return {
+      statusCode: 200,
+      payload: {
+        tag: (await organizer.deleteTag({
+          actor,
+          id: tagId,
+          now,
+        })) as JsonValue,
+      },
+    };
+  }
+
+  return undefined;
+}
+
+async function handleReminderTagsRequest(
+  method: string,
+  reminderId: string | undefined,
+  context: RouteContext,
+  actor: Actor,
+  now: IsoDateTime,
+  organizer: OrganizerService,
+): Promise<RouteResult | undefined> {
+  if (reminderId === undefined) {
+    return undefined;
+  }
+
+  if (method === 'GET') {
+    return {
+      statusCode: 200,
+      payload: {
+        tags: (await organizer.listReminderTags({
+          actor,
+          reminderId,
+        })) as JsonValue,
+      },
+    };
+  }
+
+  if (method === 'PUT') {
+    return {
+      statusCode: 200,
+      payload: {
+        tags: (await organizer.setReminderTags({
+          actor,
+          reminderId,
+          tagIds: requireTagIdsBody(context.body),
+          now,
+        })) as JsonValue,
+      },
+    };
+  }
+
+  return undefined;
+}
+
+function isOrganizerPath(pathname: string): boolean {
+  return (
+    pathname === '/v1/folders' ||
+    pathname.startsWith('/v1/folders/') ||
+    pathname === '/v1/tags' ||
+    pathname.startsWith('/v1/tags/') ||
+    /^\/v1\/reminders\/[^/]+\/tags$/.test(pathname) ||
+    pathname.startsWith('/v1/smart-lists/')
+  );
+}
+
+function parseSmartListKind(value: string | undefined): SmartListKind {
+  const smartListKinds = new Set<SmartListKind>([
+    'character',
+    'folder',
+    'home',
+    'overdue',
+    'tag',
+    'today',
+    'work',
+  ]);
+
+  if (value !== undefined && smartListKinds.has(value as SmartListKind)) {
+    return value as SmartListKind;
+  }
+
+  throw new OrganizerServiceError('ORGANIZER_VALIDATION_ERROR', 'Unsupported smart list kind', {
+    field: 'kind',
+  });
+}
+
 export async function routeRequest(
   method: string,
   requestUrl: string,
@@ -585,6 +949,12 @@ export async function routeRequest(
 ): Promise<RouteResult> {
   const normalizedMethod = method.toUpperCase();
   const url = new URL(requestUrl, `http://${host}`);
+
+  const organizerResult = await routeOrganizerRequest(normalizedMethod, url, context);
+
+  if (organizerResult !== undefined) {
+    return organizerResult;
+  }
 
   const reminderResult = await routeReminderRequest(normalizedMethod, url.pathname, context);
 

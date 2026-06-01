@@ -45,9 +45,11 @@ function createEntitlement(activeReminders = 20) {
       activeReminders,
       activeCharacters: 3,
       customCharacters: 1,
+      folders: 5,
       monthlyAiNotifications: 100,
       monthlyChats: 5,
       notificationHistoryDays: 7,
+      tags: 10,
     },
   };
 }

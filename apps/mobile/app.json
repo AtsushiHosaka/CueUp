@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "CueUp",
+    "slug": "cueup",
+    "scheme": "cueup",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "platforms": ["ios", "android"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.cueup.mobile"
+    },
+    "android": {
+      "package": "app.cueup.mobile"
+    },
+    "extra": {
+      "apiBaseUrl": "http://localhost:3000"
+    }
+  }
+}

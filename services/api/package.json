@@ -1,0 +1,16 @@
+{
+  "name": "@cueup/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build -w @cueup/shared && tsc -p tsconfig.json",
+    "dev": "npm run build && node dist/index.js",
+    "start": "node dist/index.js",
+    "typecheck": "npm run build -w @cueup/shared && tsc --noEmit -p tsconfig.json",
+    "test": "npm run build && node --test dist/**/*.test.js"
+  },
+  "dependencies": {
+    "@cueup/shared": "0.1.0"
+  }
+}

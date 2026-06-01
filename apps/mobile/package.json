@@ -1,0 +1,20 @@
+{
+  "name": "@cueup/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "build": "npm run typecheck",
+    "start": "expo start",
+    "ios": "expo start --ios",
+    "android": "expo start --android",
+    "typecheck": "npm run build -w @cueup/shared && tsc --noEmit -p tsconfig.json",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/**/*.test.js"
+  },
+  "dependencies": {
+    "@cueup/shared": "0.1.0",
+    "expo": "^54.0.0",
+    "react": "^19.0.0",
+    "react-native": "^0.81.0"
+  }
+}

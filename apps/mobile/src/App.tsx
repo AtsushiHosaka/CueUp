@@ -1,5 +1,5 @@
 import { FREE_PLAN_LIMITS, type Character, type Reminder } from '@cueup/shared';
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -1090,7 +1090,7 @@ export default function App() {
   );
 }
 
-function PixelAvatar({
+const PixelAvatar = memo(function PixelAvatar({
   character,
   selected = false,
   size = 'medium',
@@ -1134,7 +1134,7 @@ function PixelAvatar({
       ))}
     </View>
   );
-}
+});
 
 function findCharacterById(characters: Character[], characterId: string | undefined) {
   if (characterId === undefined) {

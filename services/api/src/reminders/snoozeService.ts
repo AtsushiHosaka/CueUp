@@ -69,22 +69,29 @@ export class SnoozeService {
     }
 
     const snoozedUntil = getSnoozedUntil(params.input.durationMinutes, params.now);
-    const reminder = await this.writeRepository(() =>
-      this.reminders.save({
-        ...existing,
-        status: 'snoozed',
-        scheduledAt: snoozedUntil,
-        snoozedUntil,
-        snoozeCount: snoozeCount + 1,
-        updatedAt: params.now,
-      }),
-    );
     const notificationJob = await this.jobs.scheduleSnoozeJob({
-      userId: reminder.userId,
-      reminderId: reminder.id,
+      userId: existing.userId,
+      reminderId: existing.id,
       scheduledFor: snoozedUntil,
       now: params.now,
     });
+    let reminder: Reminder;
+
+    try {
+      reminder = await this.writeRepository(() =>
+        this.reminders.save({
+          ...existing,
+          status: 'snoozed',
+          scheduledAt: snoozedUntil,
+          snoozedUntil,
+          snoozeCount: snoozeCount + 1,
+          updatedAt: params.now,
+        }),
+      );
+    } catch (error) {
+      await this.jobs.cancelJob(notificationJob, params.now);
+      throw error;
+    }
 
     if (params.input.generateMessage !== true || this.messageGenerator === undefined) {
       return { reminder, notificationJob };

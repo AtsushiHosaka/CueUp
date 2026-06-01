@@ -10,6 +10,9 @@ export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
 export type CharacterType = 'built_in' | 'custom' | 'pack';
 export type GenerationStatus = 'success' | 'fallback' | 'failed';
 export type BillingPlatform = 'app_store' | 'google_play';
+export type DevicePlatform = 'ios' | 'android';
+export type DeviceTokenStatus = 'active' | 'disabled' | 'invalid';
+export type PushDeliveryStatus = 'sent' | 'failed' | 'permission_denied';
 export type SubscriptionStatus = 'active' | 'canceled' | 'expired' | 'refunded';
 export type PackPurchaseStatus = 'active' | 'refunded';
 export type ChatRole = 'user' | 'assistant' | 'system';
@@ -138,6 +141,28 @@ export type ChatMessage = {
   createdAt: IsoDateTime;
 };
 
+export type DeviceToken = Timestamped & {
+  id: UUID;
+  userId: UUID;
+  platform: DevicePlatform;
+  token: string;
+  status: DeviceTokenStatus;
+  lastRegisteredAt: IsoDateTime;
+  invalidatedAt?: IsoDateTime | null;
+};
+
+export type PushDelivery = {
+  id: UUID;
+  userId: UUID;
+  deviceTokenId: UUID;
+  notificationMessageId: UUID;
+  status: PushDeliveryStatus;
+  providerMessageId?: string | null;
+  failureReason?: string | null;
+  retryAfter?: IsoDateTime | null;
+  createdAt: IsoDateTime;
+};
+
 export type UserScopedRecord =
   | Reminder
   | NotificationMessage
@@ -146,4 +171,6 @@ export type UserScopedRecord =
   | Subscription
   | CharacterPackPurchase
   | UsageQuota
-  | ChatMessage;
+  | ChatMessage
+  | DeviceToken
+  | PushDelivery;

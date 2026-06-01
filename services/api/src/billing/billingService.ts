@@ -177,31 +177,29 @@ export class BillingService {
     user: User;
   }): Promise<{ entitlement: EntitlementSnapshot; quota: UsageQuota }> {
     const entitlement = await this.getEntitlementSnapshot(params);
+    const period = params.now.toISOString().slice(0, 7);
     const limit =
       params.kind === 'ai_notification'
         ? entitlement.limits.monthlyAiNotifications
         : entitlement.limits.monthlyChats;
-    const current =
-      params.kind === 'ai_notification'
-        ? entitlement.usageQuota.aiNotificationCount
-        : entitlement.usageQuota.chatMessageCount;
+    const quota = await this.repository.incrementUsageQuota({
+      createQuota: () =>
+        createEmptyUsageQuota({
+          id: this.idFactory(),
+          userId: params.actor.userId,
+          period,
+          now: params.now.toISOString(),
+        }),
+      kind: params.kind,
+      limit,
+      now: params.now.toISOString(),
+      period,
+      userId: params.actor.userId,
+    });
 
-    if (current >= limit) {
+    if (quota === undefined) {
       throw usageLimitExceeded(params.kind, limit);
     }
-
-    const quota = await this.repository.saveUsageQuota({
-      ...entitlement.usageQuota,
-      aiNotificationCount:
-        params.kind === 'ai_notification'
-          ? entitlement.usageQuota.aiNotificationCount + 1
-          : entitlement.usageQuota.aiNotificationCount,
-      chatMessageCount:
-        params.kind === 'chat_message'
-          ? entitlement.usageQuota.chatMessageCount + 1
-          : entitlement.usageQuota.chatMessageCount,
-      updatedAt: params.now.toISOString(),
-    });
 
     return {
       quota,

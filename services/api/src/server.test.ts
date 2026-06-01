@@ -26,6 +26,7 @@ const testConfig = {
   port: 0,
   nodeEnv: 'test',
   aiProvider: 'disabled' as const,
+  billingVerificationEnabled: false,
   billingProducts: [
     {
       id: 'pro-ios',
@@ -131,6 +132,17 @@ test('GET /v1/billing/products returns configured store products', async () => {
   assert.equal(response.statusCode, 200);
   assert.equal(body.products[0]?.productId, 'cueup.pro.monthly');
   assert.equal(body.products[0]?.priceLabel, '$4.99/mo');
+});
+
+test('GET /v1/reminders uses default dependencies without billing configured', async () => {
+  const response = await routeRequest('GET', '/v1/reminders', 'localhost', testConfig, {
+    actor: { userId: 'alice', role: 'user' },
+    now: '2026-06-01T00:00:00.000Z',
+  });
+  const body = response.payload as { reminders: unknown[] };
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(body.reminders, []);
 });
 
 test('POST /v1/billing/verify rejects unverified receipts', async () => {

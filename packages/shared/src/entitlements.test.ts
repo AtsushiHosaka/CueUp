@@ -39,6 +39,12 @@ test('isActiveSubscription rejects expired/refunded subscriptions and keeps canc
     ),
     true,
   );
+  const { expiresAt: _expiresAt, ...canceledNoExpiry } = {
+    ...expired,
+    status: 'canceled' as const,
+  };
+
+  assert.equal(isActiveSubscription(canceledNoExpiry, now), false);
   assert.equal(isActiveSubscription({ ...expired, status: 'refunded' }, now), false);
   assert.equal(
     isActiveSubscription({ ...expired, expiresAt: '2026-06-02T00:00:00.000Z' }, now),

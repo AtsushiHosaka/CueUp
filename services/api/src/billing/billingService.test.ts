@@ -221,9 +221,138 @@ test('consumeUsage increments quota and enforces Free limits', async () => {
   );
 });
 
+test('restorePurchases verifies multiple purchases and returns cumulative entitlements', async () => {
+  const service = new BillingService(
+    new InMemoryBillingRepository(),
+    sequenceVerifier([
+      {
+        kind: 'pro_subscription',
+        platform: 'app_store',
+        productId: 'cueup.pro.monthly',
+        status: 'active',
+        transactionId: 'txn-restore-pro',
+        purchasedAt: now.toISOString(),
+        expiresAt: '2026-07-01T00:00:00.000Z',
+      },
+      {
+        kind: 'character_pack',
+        packId: 'focus-pack',
+        platform: 'app_store',
+        productId: 'cueup.pack.focus',
+        status: 'active',
+        transactionId: 'txn-restore-pack',
+        purchasedAt: now.toISOString(),
+      },
+    ]),
+    () => 'quota-1',
+    products,
+  );
+
+  const result = await service.restorePurchases({
+    actor,
+    input: {
+      purchases: [
+        {
+          platform: 'app_store',
+          productId: 'cueup.pro.monthly',
+          receipt: 'pro-receipt',
+        },
+        {
+          platform: 'app_store',
+          productId: 'cueup.pack.focus',
+          receipt: 'pack-receipt',
+        },
+      ],
+    },
+    now,
+    user,
+  });
+
+  assert.equal(result.results.length, 2);
+  assert.equal(result.entitlement.plan, 'pro');
+  assert.deepEqual(result.entitlement.activeCharacterPackIds, ['focus-pack']);
+});
+
+test('verifyPurchase rejects mismatched verification results and invalid input', async () => {
+  const service = new BillingService(
+    new InMemoryBillingRepository(),
+    verifier({
+      kind: 'character_pack',
+      packId: 'other-pack',
+      platform: 'app_store',
+      productId: 'cueup.pack.focus',
+      status: 'active',
+      transactionId: 'txn-pack-mismatch',
+      purchasedAt: now.toISOString(),
+    }),
+    () => 'quota-1',
+    products,
+  );
+
+  await assert.rejects(
+    () =>
+      service.verifyPurchase({
+        actor,
+        input: {
+          platform: 'app_store',
+          productId: 'cueup.pack.focus',
+          receipt: 'pack-receipt',
+        },
+        now,
+        user,
+      }),
+    /Purchase could not be verified/,
+  );
+
+  await assert.rejects(
+    () =>
+      service.verifyPurchase({
+        actor,
+        input: {
+          platform: 'web',
+          productId: 'cueup.pro.monthly',
+          receipt: 'store-receipt',
+        },
+        now,
+        user,
+      }),
+    /platform must be app_store or google_play/,
+  );
+
+  await assert.rejects(
+    () =>
+      service.restorePurchases({
+        actor,
+        input: {
+          purchases: 'not-an-array',
+        },
+        now,
+        user,
+      }),
+    /purchases must be an array/,
+  );
+});
+
 function verifier(transaction?: VerifiedBillingTransaction) {
   return {
     async verify() {
+      if (transaction === undefined) {
+        throw new Error('not configured for this test');
+      }
+
+      return transaction;
+    },
+  };
+}
+
+function sequenceVerifier(transactions: VerifiedBillingTransaction[]) {
+  let index = 0;
+
+  return {
+    async verify() {
+      const transaction = transactions[index];
+      index += 1;
+
       if (transaction === undefined) {
         throw new Error('not configured for this test');
       }

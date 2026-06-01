@@ -28,6 +28,7 @@ export type RuntimeConfig = {
   port: number;
   nodeEnv: string;
   aiProvider: AiProvider;
+  billingVerificationEnabled: boolean;
   billingProducts: BillingProductConfig[];
   serverOnlyCredentialNames: readonly string[];
 };
@@ -114,11 +115,28 @@ export function parseBillingProducts(value: string | undefined): BillingProductC
   return parsed.map((product, index) => parseBillingProduct(product, index));
 }
 
+export function parseBooleanFlag(value: string | undefined, fallback = false): boolean {
+  if (value === undefined || value === '') {
+    return fallback;
+  }
+
+  if (value === 'true' || value === '1') {
+    return true;
+  }
+
+  if (value === 'false' || value === '0') {
+    return false;
+  }
+
+  throw new Error(`Invalid boolean flag value: ${value}`);
+}
+
 export function getRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   return {
     port: parsePort(env.PORT),
     nodeEnv: env.NODE_ENV ?? 'development',
     aiProvider: parseAiProvider(env.AI_PROVIDER),
+    billingVerificationEnabled: parseBooleanFlag(env.BILLING_VERIFICATION_ENABLED),
     billingProducts: parseBillingProducts(env.BILLING_PRODUCTS_JSON),
     serverOnlyCredentialNames: SERVER_ONLY_CREDENTIAL_NAMES,
   };

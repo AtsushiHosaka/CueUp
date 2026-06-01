@@ -118,15 +118,14 @@ export function createApiDependencies(config: RuntimeConfig = getRuntimeConfig()
   const reminders = new InMemoryReminderRepository();
   const notificationJobs = new InMemoryNotificationJobRepository();
   const quotas = new InMemoryUsageQuotaRepository();
-  const billing =
-    config.billingProducts.length === 0
-      ? undefined
-      : new BillingService(
-          billingRepository,
-          new RejectingBillingReceiptVerifier(),
-          randomUUID,
-          config.billingProducts,
-        );
+  const billing = !config.billingVerificationEnabled
+    ? undefined
+    : new BillingService(
+        billingRepository,
+        new RejectingBillingReceiptVerifier(),
+        randomUUID,
+        config.billingProducts,
+      );
 
   return {
     ...(billing === undefined ? {} : { billing }),
@@ -833,24 +832,25 @@ async function routeBillingRequest(
   method: string,
   pathname: string,
   context: RouteContext,
+  config: RuntimeConfig,
 ): Promise<RouteResult | undefined> {
   if (pathname !== '/v1/billing/products' && !pathname.startsWith('/v1/billing/')) {
     return undefined;
   }
 
-  const dependencies = context.dependencies ?? createApiDependencies();
+  const dependencies = context.dependencies ?? createApiDependencies(config);
 
   try {
-    const billing = resolveBillingService(dependencies);
-
     if (pathname === '/v1/billing/products' && method === 'GET') {
       return {
         statusCode: 200,
         payload: {
-          products: billing.listProducts() as JsonValue,
+          products: (dependencies.billing?.listProducts() ?? config.billingProducts) as JsonValue,
         },
       };
     }
+
+    const billing = resolveBillingService(dependencies);
 
     const actor = resolveActor(context);
     const plan = resolvePlan(context);
@@ -1356,7 +1356,12 @@ export async function routeRequest(
         }
       : context;
 
-  const billingResult = await routeBillingRequest(normalizedMethod, url.pathname, routeContext);
+  const billingResult = await routeBillingRequest(
+    normalizedMethod,
+    url.pathname,
+    routeContext,
+    config,
+  );
 
   if (billingResult !== undefined) {
     return billingResult;

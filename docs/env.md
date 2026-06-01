@@ -21,6 +21,7 @@
 | `FCM_SERVICE_ACCOUNT_JSON`         |    Production push | Server-only Firebase service account JSON.                 |
 | `APP_STORE_SHARED_SECRET`          | Production billing | Server-only App Store receipt verification secret.         |
 | `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | Production billing | Server-only Google Play service account JSON.              |
+| `BILLING_VERIFICATION_ENABLED`     |                 No | Set `true` only when server receipt verification is wired. |
 | `BILLING_PRODUCTS_JSON`            |                 No | JSON array of Pro and Character Pack product IDs/prices.   |
 
 `BILLING_PRODUCTS_JSON` entries use this shape:

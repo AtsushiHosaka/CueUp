@@ -102,3 +102,49 @@ test('PATCH /v1/reminders/:id reports validation errors', async () => {
   assert.equal(body.error, 'invalid_request');
   assert.equal(body.details.field, 'scheduledAt');
 });
+
+test('POST /v1/reminders/:id/complete returns completed and next reminder envelope', async () => {
+  const dependencies = {
+    reminders: new ReminderService(
+      new InMemoryReminderRepository([
+        {
+          id: 'reminder-1',
+          userId: 'alice',
+          title: 'Plan workout',
+          note: null,
+          scheduledAt: '2026-06-01T09:00:00.000Z',
+          recurrenceRule: { frequency: 'daily', interval: 1 },
+          characterId: 'character-1',
+          folderId: null,
+          tagIds: [],
+          status: 'active',
+          createdAt: '2026-06-01T00:00:00.000Z',
+          updatedAt: '2026-06-01T00:00:00.000Z',
+        },
+      ]),
+      () => 'generated-1',
+    ),
+  };
+  const response = await routeRequest(
+    'POST',
+    '/v1/reminders/reminder-1/complete',
+    'localhost',
+    testConfig,
+    {
+      actor: { userId: 'alice', role: 'user' },
+      dependencies,
+      now: '2026-06-01T10:00:00.000Z',
+    },
+  );
+  const body = response.payload as {
+    reminder: { id: string; status: string; completedAt: string };
+    nextReminder: { id: string; scheduledAt: string };
+  };
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(body.reminder.id, 'reminder-1');
+  assert.equal(body.reminder.status, 'completed');
+  assert.equal(body.reminder.completedAt, '2026-06-01T10:00:00.000Z');
+  assert.equal(body.nextReminder.id, 'generated-1');
+  assert.equal(body.nextReminder.scheduledAt, '2026-06-02T09:00:00.000Z');
+});

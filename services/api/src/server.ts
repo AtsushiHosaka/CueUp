@@ -252,13 +252,18 @@ async function handleReminderRequest(
     }
 
     if (action === 'complete' && method === 'POST') {
+      const result = await dependencies.reminders.completeReminder({
+        actor,
+        id: reminderId,
+        now,
+      });
+
       return {
         statusCode: 200,
-        payload: (await dependencies.reminders.completeReminder({
-          actor,
-          id: reminderId,
-          now,
-        })) as JsonValue,
+        payload: {
+          reminder: result.completed as JsonValue,
+          nextReminder: (result.nextReminder ?? null) as JsonValue,
+        },
       };
     }
 

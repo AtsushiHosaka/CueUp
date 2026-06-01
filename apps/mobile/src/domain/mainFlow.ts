@@ -12,7 +12,11 @@ export type MobileRoute =
   | 'reminderForm'
   | 'characterSelect'
   | 'characterCreate'
-  | 'proUpsell';
+  | 'proUpsell'
+  | 'history'
+  | 'chat'
+  | 'packStore'
+  | 'settings';
 
 export type NotificationPermissionStatus = 'unknown' | 'granted' | 'denied';
 export type AsyncStatus = 'idle' | 'loading' | 'saving' | 'failed';

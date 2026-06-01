@@ -30,20 +30,49 @@ import {
 } from './domain/mainFlow';
 import { sanitizeCustomCharacterText } from './domain/customCharacters';
 import { createReminderDraft, sanitizeReminderTitle } from './domain/reminders';
+import {
+  appendChatExchange,
+  createChatScreenModel,
+  createHistoryScreenModel,
+  createPackStoreScreenModel,
+  createProScreenModel,
+  createSecondaryFlowState,
+  createSettingsScreenModel,
+  mapCommerceFailure,
+  markPackPurchased,
+  type HistoryItem,
+  type SecondaryFlowState,
+  type SettingsDestination,
+} from './domain/secondaryFlow';
 
 const fixedNow = new Date('2026-06-01T00:00:00.000Z');
 
 export default function App() {
   const now = useMemo(() => fixedNow, []);
   const [flow, setFlow] = useState<MainFlowState>(() => createInitialMainFlowState(now));
+  const [secondary, setSecondary] = useState<SecondaryFlowState>(() =>
+    createSecondaryFlowState(now.toISOString()),
+  );
   const home = createHomeScreenModel(flow, now);
   const onboarding = createOnboardingScreenModel(flow);
   const reminderForm = createReminderFormModel(flow);
   const characterCreate = createCharacterCreateModel(flow);
   const characterRows = createCharacterSelectRows(flow);
+  const selectedCharacter = flow.characters.find(
+    (character) => character.id === flow.selectedCharacterId,
+  );
+  const history = createHistoryScreenModel(secondary);
+  const chat = createChatScreenModel(secondary, selectedCharacter);
+  const pro = createProScreenModel(secondary);
+  const packStore = createPackStoreScreenModel(secondary);
+  const settings = createSettingsScreenModel(secondary);
 
   function updateFlow(updater: (current: MainFlowState) => MainFlowState) {
     setFlow((current) => updater(current));
+  }
+
+  function updateSecondary(updater: (current: SecondaryFlowState) => SecondaryFlowState) {
+    setSecondary((current) => updater(current));
   }
 
   function goTo(route: MobileRoute) {
@@ -200,6 +229,104 @@ export default function App() {
       characterSavingStatus: 'idle',
       characterPreviewStatus: 'ready',
       lastError: undefined,
+    }));
+  }
+
+  function reuseHistoryItem(item: HistoryItem) {
+    updateFlow((current) => ({
+      ...current,
+      route: 'reminderForm',
+      reminderDraft: {
+        title: item.body.slice(0, 40),
+        note: item.body,
+        scheduledAt: createReminderDraft(now).scheduledAt,
+      },
+      selectedCharacterId: item.characterId,
+      editingReminderId: undefined,
+      lastError: undefined,
+    }));
+  }
+
+  function openChatForHistory(item: HistoryItem) {
+    updateFlow((current) => ({
+      ...current,
+      route: 'chat',
+      selectedCharacterId: item.characterId,
+      lastError: undefined,
+    }));
+  }
+
+  function deleteHistoryItem(historyItemId: string) {
+    updateSecondary((current) => ({
+      ...current,
+      historyItems: current.historyItems.filter((item) => item.id !== historyItemId),
+    }));
+  }
+
+  function sendChatMessage() {
+    if (secondary.remainingFreeChats <= 0) {
+      updateFlow((current) => ({
+        ...current,
+        route: 'proUpsell',
+        lastError: mapApiErrorToFlowError('plan_limit_exceeded'),
+      }));
+      return;
+    }
+
+    if (secondary.chatInput.toLowerCase().includes('fail')) {
+      updateSecondary((current) => ({
+        ...current,
+        chatStatus: 'failed',
+      }));
+      return;
+    }
+
+    updateSecondary((current) =>
+      appendChatExchange(current, {
+        characterId: flow.selectedCharacterId,
+        userId: 'user-1',
+        body: current.chatInput,
+        now: now.toISOString(),
+      }),
+    );
+  }
+
+  function createReminderFromChat() {
+    const latestUserMessage = [...secondary.chatMessages]
+      .reverse()
+      .find((message) => message.role === 'user');
+
+    updateFlow((current) => ({
+      ...current,
+      route: 'reminderForm',
+      reminderDraft: {
+        title: latestUserMessage?.body.slice(0, 40) ?? 'チャットから Cue',
+        note: latestUserMessage?.body ?? '',
+        scheduledAt: createReminderDraft(now).scheduledAt,
+      },
+      editingReminderId: undefined,
+      lastError: undefined,
+    }));
+  }
+
+  function selectSetting(destination: SettingsDestination) {
+    if (destination === 'logout') {
+      updateFlow((current) => ({
+        ...current,
+        route: 'onboarding',
+        authenticated: false,
+        lastError: undefined,
+      }));
+      return;
+    }
+
+    if (destination === 'plan') {
+      goTo('proUpsell');
+    }
+
+    updateSecondary((current) => ({
+      ...current,
+      settingsSelection: destination,
     }));
   }
 
@@ -539,26 +666,290 @@ export default function App() {
     );
   }
 
+  function renderHistory() {
+    return (
+      <View style={styles.stack}>
+        <View style={styles.topBar}>
+          <View>
+            <Text style={styles.kicker}>History</Text>
+            <Text style={styles.title}>通知履歴</Text>
+          </View>
+          <Button
+            label="再読込"
+            compact
+            variant="secondary"
+            onPress={() =>
+              updateSecondary((current) => ({
+                ...current,
+                historyStatus: current.historyStatus === 'failed' ? 'idle' : 'loading',
+              }))
+            }
+          />
+        </View>
+        {history.isLoading ? (
+          <View style={styles.stack}>
+            <View style={styles.skeletonRow} />
+            <Button
+              label="読込完了"
+              compact
+              onPress={() =>
+                updateSecondary((current) => ({
+                  ...current,
+                  historyStatus: 'idle',
+                }))
+              }
+            />
+          </View>
+        ) : null}
+        {history.emptyMessage !== undefined ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.title}>{history.emptyMessage}</Text>
+            <Text style={styles.body}>AI 通知が届くとここから再利用できます。</Text>
+          </View>
+        ) : null}
+        {history.errorMessage !== undefined ? (
+          <InlineError error={{ message: history.errorMessage, actionLabel: '再試行' }} />
+        ) : null}
+        {history.rows.map((row) => {
+          const item = secondary.historyItems.find((historyItem) => historyItem.id === row.id);
+
+          if (item === undefined) {
+            return null;
+          }
+
+          return (
+            <View key={row.id} style={styles.reminderRow}>
+              <View style={styles.rowHeader}>
+                <Text style={styles.rowTitle}>{row.title}</Text>
+                <Text style={styles.badge}>{row.statusLabel}</Text>
+              </View>
+              <Text style={styles.meta}>{row.detail}</Text>
+              <View style={styles.inlineActions}>
+                <Button label="再利用" compact onPress={() => reuseHistoryItem(item)} />
+                <Button
+                  label="チャット"
+                  compact
+                  variant="secondary"
+                  onPress={() => openChatForHistory(item)}
+                />
+                <Button
+                  label="削除"
+                  compact
+                  variant="danger"
+                  onPress={() => deleteHistoryItem(row.id)}
+                />
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
+  function renderChat() {
+    return (
+      <View style={styles.stack}>
+        <View style={styles.topBar}>
+          <View>
+            <Text style={styles.kicker}>Chat</Text>
+            <Text style={styles.title}>{chat.characterName}</Text>
+          </View>
+          <Text style={styles.badge}>{chat.remainingLabel}</Text>
+        </View>
+        {chat.emptyGreeting !== undefined ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.rowTitle}>{chat.emptyGreeting}</Text>
+          </View>
+        ) : null}
+        {chat.errorMessage !== undefined ? (
+          <InlineError error={{ message: chat.errorMessage, actionLabel: '再送信' }} />
+        ) : null}
+        {chat.messages.map((message) => (
+          <View
+            key={message.id}
+            style={[
+              styles.chatBubble,
+              message.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant,
+            ]}
+          >
+            <Text style={styles.meta}>{message.role === 'user' ? 'You' : chat.characterName}</Text>
+            <Text style={styles.value}>{message.body}</Text>
+          </View>
+        ))}
+        <Field
+          label="メッセージ"
+          value={secondary.chatInput}
+          multiline
+          onChangeText={(chatInput) =>
+            updateSecondary((current) => ({
+              ...current,
+              chatInput,
+              chatStatus: 'idle',
+            }))
+          }
+        />
+        <View style={styles.inlineActions}>
+          <Button label="送信" compact onPress={sendChatMessage} />
+          <Button label="Cue 化" compact variant="secondary" onPress={createReminderFromChat} />
+          <Button
+            label="AI失敗"
+            compact
+            variant="ghost"
+            onPress={() =>
+              updateSecondary((current) => ({
+                ...current,
+                chatStatus: 'failed',
+              }))
+            }
+          />
+        </View>
+      </View>
+    );
+  }
+
   function renderProUpsell() {
     return (
       <View style={styles.stack}>
         <View style={styles.heroBand}>
           <Text style={styles.kicker}>Pro</Text>
-          <Text style={styles.heroTitle}>Cue をもっと増やす</Text>
-          <Text style={styles.body}>
-            Free 上限、Character Pack、通知履歴の拡張が必要な操作です。
-          </Text>
+          <Text style={styles.heroTitle}>{pro.title}</Text>
+          <Text style={styles.body}>{pro.benefits.join(' / ')}</Text>
         </View>
         {flow.lastError !== undefined ? <InlineError error={flow.lastError} /> : null}
-        <View style={styles.planRow}>
-          <Text style={styles.value}>Free</Text>
-          <Text style={styles.meta}>{FREE_PLAN_LIMITS.activeReminders} active Cue</Text>
-        </View>
-        <View style={styles.planRow}>
-          <Text style={styles.value}>Pro</Text>
-          <Text style={styles.meta}>上限拡張と Pack 利用</Text>
+        {pro.errorMessage !== undefined ? (
+          <InlineError error={{ message: pro.errorMessage }} />
+        ) : null}
+        {pro.comparisonRows.map((row) => (
+          <View key={row.label} style={styles.planRow}>
+            <Text style={styles.value}>{row.label}</Text>
+            <Text style={styles.meta}>
+              Free {row.free} / Pro {row.pro}
+            </Text>
+          </View>
+        ))}
+        <View style={styles.inlineActions}>
+          <Button
+            label={pro.purchaseLabel}
+            compact
+            onPress={() =>
+              updateSecondary((current) => ({
+                ...current,
+                commerceStatus: 'loading',
+              }))
+            }
+          />
+          <Button
+            label={pro.restoreLabel}
+            compact
+            variant="secondary"
+            onPress={() =>
+              updateSecondary((current) => ({
+                ...current,
+                commerceStatus: mapCommerceFailure('restore'),
+              }))
+            }
+          />
+          <Button
+            label="購入失敗"
+            compact
+            variant="ghost"
+            onPress={() =>
+              updateSecondary((current) => ({
+                ...current,
+                commerceStatus: mapCommerceFailure('purchase'),
+              }))
+            }
+          />
         </View>
         <Button label="ホームへ戻る" onPress={() => goTo('home')} />
+      </View>
+    );
+  }
+
+  function renderPackStore() {
+    return (
+      <View style={styles.stack}>
+        <View style={styles.topBar}>
+          <View>
+            <Text style={styles.kicker}>Store</Text>
+            <Text style={styles.title}>Character Pack</Text>
+          </View>
+          <Button
+            label="復元"
+            compact
+            variant="secondary"
+            onPress={() =>
+              updateSecondary((current) => ({
+                ...current,
+                commerceStatus: mapCommerceFailure('restore'),
+              }))
+            }
+          />
+        </View>
+        {packStore.errorMessage !== undefined ? (
+          <InlineError error={{ message: packStore.errorMessage }} />
+        ) : null}
+        {packStore.rows.map((row) => (
+          <View key={row.id} style={styles.characterRow}>
+            <View style={styles.flexColumn}>
+              <Text style={styles.rowTitle}>{row.name}</Text>
+              <Text style={styles.meta}>{row.description}</Text>
+              <Text style={styles.badge}>{row.priceLabel}</Text>
+            </View>
+            <Button
+              label={row.actionLabel}
+              compact
+              variant={row.available ? 'secondary' : 'primary'}
+              onPress={() =>
+                updateSecondary((current) =>
+                  row.available ? current : markPackPurchased(current, row.id),
+                )
+              }
+            />
+          </View>
+        ))}
+        <Button
+          label="購入失敗を表示"
+          variant="ghost"
+          onPress={() =>
+            updateSecondary((current) => ({
+              ...current,
+              commerceStatus: mapCommerceFailure('purchase'),
+            }))
+          }
+        />
+      </View>
+    );
+  }
+
+  function renderSettings() {
+    return (
+      <View style={styles.stack}>
+        <View>
+          <Text style={styles.kicker}>Settings</Text>
+          <Text style={styles.title}>設定</Text>
+        </View>
+        {settings.selectedDetail !== undefined ? (
+          <View style={styles.notice}>
+            <Text style={styles.noticeTitle}>{settings.selectedDetail}</Text>
+          </View>
+        ) : null}
+        {settings.rows.map((row) => (
+          <Pressable
+            key={row.destination}
+            accessibilityRole="button"
+            onPress={() => selectSetting(row.destination)}
+            style={styles.settingsRow}
+          >
+            <View style={styles.flexColumn}>
+              <Text style={[styles.rowTitle, row.destructive ? styles.dangerText : undefined]}>
+                {row.title}
+              </Text>
+              <Text style={styles.meta}>{row.detail}</Text>
+            </View>
+            <Text style={styles.meta}>Open</Text>
+          </Pressable>
+        ))}
       </View>
     );
   }
@@ -603,6 +994,22 @@ export default function App() {
       return renderProUpsell();
     }
 
+    if (flow.route === 'history') {
+      return renderHistory();
+    }
+
+    if (flow.route === 'chat') {
+      return renderChat();
+    }
+
+    if (flow.route === 'packStore') {
+      return renderPackStore();
+    }
+
+    if (flow.route === 'settings') {
+      return renderSettings();
+    }
+
     return renderHome();
   }
 
@@ -612,13 +1019,18 @@ export default function App() {
       {flow.authenticated ? (
         <View style={styles.tabBar}>
           <Tab label="Home" active={flow.route === 'home'} onPress={() => goTo('home')} />
-          <Tab label="New" active={flow.route === 'reminderForm'} onPress={openCreateReminder} />
+          <Tab label="History" active={flow.route === 'history'} onPress={() => goTo('history')} />
+          <Tab label="Chat" active={flow.route === 'chat'} onPress={() => goTo('chat')} />
           <Tab
-            label="Chars"
-            active={flow.route === 'characterSelect' || flow.route === 'characterCreate'}
-            onPress={() => goTo('characterSelect')}
+            label="Store"
+            active={flow.route === 'packStore' || flow.route === 'proUpsell'}
+            onPress={() => goTo('packStore')}
           />
-          <Tab label="Pro" active={flow.route === 'proUpsell'} onPress={() => goTo('proUpsell')} />
+          <Tab
+            label="Settings"
+            active={flow.route === 'settings'}
+            onPress={() => goTo('settings')}
+          />
         </View>
       ) : null}
     </SafeAreaView>
@@ -935,6 +1347,41 @@ const styles = StyleSheet.create({
     gap: 12,
     justifyContent: 'space-between',
     padding: 14,
+  },
+  flexColumn: {
+    flex: 1,
+    gap: 6,
+  },
+  chatBubble: {
+    borderRadius: 8,
+    gap: 6,
+    padding: 12,
+  },
+  chatBubbleUser: {
+    alignSelf: 'flex-end',
+    backgroundColor: palette.paleBlue,
+    maxWidth: '88%',
+  },
+  chatBubbleAssistant: {
+    alignSelf: 'flex-start',
+    backgroundColor: palette.surface,
+    borderColor: palette.border,
+    borderWidth: 1,
+    maxWidth: '88%',
+  },
+  settingsRow: {
+    alignItems: 'center',
+    backgroundColor: palette.surface,
+    borderColor: palette.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    padding: 14,
+  },
+  dangerText: {
+    color: palette.coral,
   },
   preview: {
     backgroundColor: palette.paleTeal,

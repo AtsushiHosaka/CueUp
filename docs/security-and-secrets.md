@@ -31,4 +31,8 @@ These values belong only in backend runtime secret storage:
 
 ## Data Access
 
-All user-owned records must be scoped by authenticated user ID. Later data model work must add tests proving that users cannot read or mutate each other's reminders, characters, notification history, billing state, folders, or tags.
+All user-owned records must be scoped by authenticated user ID. CI must keep tests in place proving that users cannot read or mutate another user's reminders, custom characters, notification history, chat history, organizer folders, or tags. Billing state and entitlement checks must stay server-side and use the authenticated actor before exposing plan or Character Pack access.
+
+## Release Quality Gate
+
+`npm run quality:check` is part of CI and fails when the quality gate documentation, i18n copy structure, user isolation tests, or representative AI/push/chat/commerce failure tests are removed.

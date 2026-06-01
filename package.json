@@ -18,6 +18,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "node scripts/lint.mjs && npm run typecheck --workspaces --if-present",
+    "quality:check": "node scripts/quality-gate.mjs",
     "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {

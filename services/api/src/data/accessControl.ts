@@ -80,8 +80,10 @@ const sensitiveLogFields = new Set([
   'note',
   'personaPrompt',
   'prohibitedStyle',
+  'relationship',
   'title',
   'tokenUsage',
+  'tone',
 ]);
 
 export function redactForLog(value: unknown): unknown {

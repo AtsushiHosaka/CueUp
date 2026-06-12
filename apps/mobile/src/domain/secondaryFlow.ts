@@ -80,11 +80,15 @@ export type HistoryScreenModel = {
 
 export type ChatScreenModel = {
   characterName: string;
+  personaChip: PixelPersonaChipModel;
   remainingLabel: string;
+  remainingBadge: PixelBadgeModel;
+  isLoading: boolean;
   emptyGreeting?: string;
   messages: Array<{
     id: string;
     role: ChatMessage['role'];
+    roleLabel: string;
     body: string;
   }>;
   errorMessage?: string;
@@ -232,28 +236,32 @@ export function createHistoryScreenModel(
 
   return {
     isLoading: false,
-    rows: state.historyItems.map((item) => ({
-      id: item.id,
-      title: item.body,
-      body: item.body,
-      detail: `${item.characterName} / ${item.sentAt ?? copy.history.unsent}`,
-      personaChip: createPixelPersonaChipModel(
+    rows: state.historyItems.map((item) => {
+      const personaChip = createPixelPersonaChipModel(
         {
           id: item.characterId,
           name: item.characterName,
           type: 'built_in',
         },
         copy,
-      ),
-      canChat: item.characterId.trim().length > 0,
-      statusLabel: createHistoryStatusLabel(item.generationStatus, copy),
-      statusBadge: createHistoryStatusBadge(item.generationStatus, copy),
-      actionLabels: {
-        reuse: copy.history.reuse,
-        chat: copy.history.chat,
-        delete: copy.common.delete,
-      },
-    })),
+      );
+
+      return {
+        id: item.id,
+        title: item.body,
+        body: item.body,
+        detail: `${item.sentAt ?? copy.history.unsent} / ${personaChip.safetyLabel}`,
+        personaChip,
+        canChat: item.characterId.trim().length > 0,
+        statusLabel: createHistoryStatusLabel(item.generationStatus, copy),
+        statusBadge: createHistoryStatusBadge(item.generationStatus, copy),
+        actionLabels: {
+          reuse: copy.history.reuse,
+          chat: copy.history.chat,
+          delete: copy.common.delete,
+        },
+      };
+    }),
   };
 }
 
@@ -263,10 +271,17 @@ export function createChatScreenModel(
   copy: UiText = defaultCopy,
 ): ChatScreenModel {
   const characterName = character?.name ?? copy.chat.assistantNameFallback;
+  const personaChip = createPixelPersonaChipModel(character, copy);
 
   return {
     characterName,
+    personaChip,
     remainingLabel: copy.chat.remainingFree(state.remainingFreeChats),
+    remainingBadge: {
+      label: copy.chat.remainingFree(state.remainingFreeChats),
+      tone: state.remainingFreeChats > 0 ? 'neutral' : 'warning',
+    },
+    isLoading: state.chatStatus === 'loading',
     ...(state.chatMessages.length === 0
       ? {
           emptyGreeting: copy.chat.emptyGreeting(characterName),
@@ -277,6 +292,7 @@ export function createChatScreenModel(
       .map((message) => ({
         id: message.id,
         role: message.role,
+        roleLabel: message.role === 'user' ? copy.chat.you : personaChip.archetypeLabel,
         body: message.body,
       })),
     ...(state.chatStatus === 'failed'
@@ -355,6 +371,21 @@ export function createProScreenModel(
         label: copy.pro.history,
         free: copy.pro.historyDays(FREE_PLAN_LIMITS.notificationHistoryDays),
         pro: copy.pro.unlimited,
+      },
+      {
+        label: copy.pro.foldersTags,
+        free: copy.pro.basic,
+        pro: copy.pro.included,
+      },
+      {
+        label: copy.pro.smartLists,
+        free: copy.pro.unavailable,
+        pro: copy.pro.included,
+      },
+      {
+        label: copy.pro.sync,
+        free: '1',
+        pro: copy.pro.multiDevice,
       },
     ],
     purchaseLabel: state.commerceStatus === 'loading' ? copy.pro.purchasing : copy.pro.purchase,

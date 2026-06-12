@@ -48,6 +48,21 @@ test('home model surfaces loading skeletons and filtered reminder rows', () => {
     ...createDemoMainFlowState(now),
     reminderFilter: 'all' as const,
   };
+  const completed = {
+    ...all,
+    reminders: [
+      ...all.reminders,
+      {
+        ...all.reminders[0]!,
+        id: 'reminder-completed',
+        title: '完了したCue',
+        status: 'completed' as const,
+      },
+    ],
+  };
+  const completedRow = createHomeScreenModel(completed, now).rows.find(
+    (row) => row.id === 'reminder-completed',
+  );
 
   assert.equal(createHomeScreenModel(loading, now).skeletonRows, 3);
   assert.deepEqual(
@@ -62,6 +77,8 @@ test('home model surfaces loading skeletons and filtered reminder rows', () => {
   assert.equal(createHomeScreenModel(all, now).rows[0]?.stateBadge.label, '進行中');
   assert.equal(createHomeScreenModel(all, now).rows[1]?.stateBadge.label, 'スヌーズ');
   assert.equal(createHomeScreenModel(all, now).rows[0]?.actionLabels.snooze, '10分後');
+  assert.equal(completedRow?.stateBadge.label, '完了');
+  assert.equal(completedRow?.actionLabels.edit, undefined);
 });
 
 test('reminder form model handles missing required fields and free limits', () => {

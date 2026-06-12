@@ -595,15 +595,22 @@ export default function App() {
             }))
           }
         />
-        <View style={styles.selectorRow}>
-          <View style={styles.selectorIdentity}>
-            <PixelAvatar character={selectedCharacter} />
-            <View>
+        <View style={styles.formPersonaBlock}>
+          <View style={styles.formPersonaTopLine}>
+            <View style={styles.flexColumn}>
               <Text style={styles.label}>{copy.reminderForm.characterLabel}</Text>
               <Text style={styles.value}>{reminderForm.selectedCharacterName}</Text>
             </View>
+            <Button label={copy.common.select} compact onPress={() => goTo('characterSelect')} />
           </View>
-          <Button label={copy.common.select} compact onPress={() => goTo('characterSelect')} />
+          <View style={styles.badgeLine}>
+            <PixelPersonaChip
+              character={selectedCharacter}
+              chip={reminderForm.selectedPersonaChip}
+              compact
+            />
+            <Text style={styles.meta}>{reminderForm.selectedPersonaChip.safetyLabel}</Text>
+          </View>
         </View>
         {reminderForm.validationError !== undefined ? (
           <InlineError error={reminderForm.validationError} />
@@ -623,40 +630,61 @@ export default function App() {
           </View>
           <Button label={copy.common.create} compact onPress={() => goTo('characterCreate')} />
         </View>
+        {flow.lastError !== undefined ? <InlineError error={flow.lastError} /> : null}
         {characterRows.map((row) => {
           const character = findCharacterById(flow.characters, row.id);
 
           return (
-            <View key={row.id} style={styles.characterRow}>
-              <View style={styles.characterIdentity}>
-                <PixelAvatar character={character} selected={row.selected} />
+            <View key={row.id} style={styles.personaCard}>
+              <View style={styles.personaCardTopLine}>
+                <PixelPersonaChip character={character} chip={row.personaChip} compact />
+                <PixelBadge badge={row.stateBadge} />
+              </View>
+              <View style={styles.personaCardBody}>
                 <View style={styles.flexColumn}>
                   <Text style={styles.rowTitle}>{row.name}</Text>
                   <Text style={styles.meta}>{row.detail}</Text>
+                  <Text style={styles.meta}>{row.safetyLabel}</Text>
+                </View>
+                <View style={styles.badgeLine}>
+                  <Text style={styles.badge}>{row.availabilityLabel}</Text>
+                  <Text style={styles.badge}>
+                    {row.archetypeLabel} / {row.toneLabel}
+                  </Text>
                 </View>
               </View>
-              <Button
-                label={row.actionLabel}
-                compact
-                variant={row.availability === 'available' ? 'secondary' : 'ghost'}
-                onPress={() => {
-                  if (row.availability !== 'available') {
+              <View style={styles.inlineActions}>
+                <Button
+                  label={row.actionLabel}
+                  compact
+                  variant={row.availability === 'available' ? 'secondary' : 'ghost'}
+                  onPress={() => {
+                    if (row.availability === 'pack_required') {
+                      updateFlow((current) => ({
+                        ...current,
+                        route: 'proUpsell',
+                        lastError: mapApiErrorToFlowError('plan_limit_exceeded', copy),
+                      }));
+                      return;
+                    }
+
+                    if (row.availability === 'owner_only') {
+                      updateFlow((current) => ({
+                        ...current,
+                        lastError: mapApiErrorToFlowError('forbidden', copy),
+                      }));
+                      return;
+                    }
+
                     updateFlow((current) => ({
                       ...current,
-                      route: 'proUpsell',
-                      lastError: mapApiErrorToFlowError('plan_limit_exceeded', copy),
+                      selectedCharacterId: row.id,
+                      route: 'reminderForm',
+                      lastError: undefined,
                     }));
-                    return;
-                  }
-
-                  updateFlow((current) => ({
-                    ...current,
-                    selectedCharacterId: row.id,
-                    route: 'reminderForm',
-                    lastError: undefined,
-                  }));
-                }}
-              />
+                  }}
+                />
+              </View>
             </View>
           );
         })}
@@ -684,6 +712,13 @@ export default function App() {
             variant="ghost"
             onPress={() => goTo('characterSelect')}
           />
+        </View>
+        <View style={styles.safetyNotice}>
+          <PixelMotif />
+          <View style={styles.flexColumn}>
+            <Text style={styles.label}>{copy.persona.fictionalLabel}</Text>
+            <Text style={styles.meta}>{characterCreate.safetyHelper}</Text>
+          </View>
         </View>
         <Field
           label={copy.character.name}
@@ -1738,22 +1773,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingTop: 12,
   },
-  selectorRow: {
-    alignItems: 'center',
+  formPersonaBlock: {
     backgroundColor: palette.surface,
     borderColor: palette.border,
     borderRadius: 8,
     borderWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 12,
     padding: 14,
   },
-  selectorIdentity: {
-    alignItems: 'center',
-    flex: 1,
+  formPersonaTopLine: {
+    alignItems: 'flex-start',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
-    minWidth: 0,
+    justifyContent: 'space-between',
   },
   characterRow: {
     alignItems: 'center',
@@ -1772,6 +1805,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     minWidth: 0,
+  },
+  personaCard: {
+    backgroundColor: palette.surface,
+    borderColor: palette.border,
+    borderLeftColor: palette.teal,
+    borderLeftWidth: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+    padding: 14,
+  },
+  personaCardTopLine: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  personaCardBody: {
+    gap: 8,
   },
   flexColumn: {
     flex: 1,
@@ -1912,6 +1965,16 @@ const styles = StyleSheet.create({
   },
   dangerText: {
     color: palette.coral,
+  },
+  safetyNotice: {
+    alignItems: 'center',
+    backgroundColor: palette.paleTeal,
+    borderColor: '#BFD8D3',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    padding: 14,
   },
   preview: {
     backgroundColor: palette.paleTeal,

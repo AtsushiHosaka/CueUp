@@ -387,7 +387,7 @@ export function createCharacterCreateModel(
       state.characterPreviewStatus === 'generating'
         ? copy.character.previewGenerating
         : copy.character.previewReady(name),
-    safetyHelper: copy.character.createSafetyHelper,
+    safetyHelper: copy.persona.customSafetyHelper,
     ...(!canSubmit
       ? {
           validationError: {

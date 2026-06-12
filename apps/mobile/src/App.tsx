@@ -27,9 +27,14 @@ import {
   type MainFlowState,
   type MobileRoute,
   type ReminderFilter,
+  type ReminderRow,
 } from './domain/mainFlow';
 import { sanitizeCustomCharacterText } from './domain/customCharacters';
-import { getPixelAvatarTheme, type PixelCharacter } from './domain/pixelCharacters';
+import {
+  getPixelAvatarTheme,
+  type PixelBadgeModel,
+  type PixelCharacter,
+} from './domain/pixelCharacters';
 import { createReminderDraft, sanitizeReminderTitle } from './domain/reminders';
 import {
   appendChatExchange,
@@ -350,8 +355,11 @@ export default function App() {
   function renderOnboarding() {
     return (
       <View style={styles.stack}>
-        <View style={styles.heroBand}>
-          <Text style={styles.kicker}>CueUp</Text>
+        <View style={styles.onboardingHeader}>
+          <View style={styles.brandRow}>
+            <PixelMotif />
+            <Text style={styles.brandText}>CueUp</Text>
+          </View>
           <Text style={styles.heroTitle}>{onboarding.title}</Text>
           <Text style={styles.body}>{copy.onboarding.body}</Text>
         </View>
@@ -400,7 +408,7 @@ export default function App() {
   function renderHome() {
     return (
       <View style={styles.stack}>
-        <View style={styles.topBar}>
+        <View style={styles.homeHeader}>
           <View>
             <Text style={styles.kicker}>{copy.home.kicker}</Text>
             <Text style={styles.title}>{copy.home.title}</Text>
@@ -439,7 +447,8 @@ export default function App() {
         ) : null}
         {home.emptyState !== undefined ? (
           <View style={styles.emptyState}>
-            <Text style={styles.title}>{home.emptyState.title}</Text>
+            <PixelMotif />
+            <Text style={styles.rowTitle}>{home.emptyState.title}</Text>
             <Text style={styles.body}>{home.emptyState.body}</Text>
             <View style={styles.inlineActions}>
               <Button label={home.emptyState.actionLabel} compact onPress={openCreateReminder} />
@@ -459,18 +468,19 @@ export default function App() {
           return (
             <View key={row.id} style={styles.reminderRow}>
               <View style={styles.rowHeader}>
-                <View style={styles.reminderIdentity}>
-                  <PixelAvatar character={character} size="small" />
+                <View style={styles.reminderTitleBlock}>
                   <Text style={styles.rowTitle}>{row.title}</Text>
+                  {row.note !== undefined ? <Text style={styles.rowNote}>{row.note}</Text> : null}
                 </View>
-                {row.badge !== undefined ? <Text style={styles.badge}>{row.badge}</Text> : null}
+                <PixelBadge badge={row.stateBadge} />
               </View>
-              <Text style={styles.meta}>
-                {row.detail} / {row.characterName}
-              </Text>
+              <View style={styles.reminderMetaRow}>
+                <PixelPersonaChip character={character} row={row} />
+                <Text style={styles.meta}>{row.scheduledLabel}</Text>
+              </View>
               <View style={styles.inlineActions}>
                 <Button
-                  label={copy.home.complete}
+                  label={row.actionLabels.complete}
                   compact
                   onPress={() =>
                     updateFlow((current) => ({
@@ -480,7 +490,7 @@ export default function App() {
                   }
                 />
                 <Button
-                  label={copy.home.snoozeTenMinutes}
+                  label={row.actionLabels.snooze}
                   compact
                   variant="secondary"
                   onPress={() =>
@@ -496,14 +506,14 @@ export default function App() {
                 />
                 {reminder !== undefined ? (
                   <Button
-                    label={copy.common.edit}
+                    label={row.actionLabels.edit}
                     compact
                     variant="ghost"
                     onPress={() => openEditReminder(reminder)}
                   />
                 ) : null}
                 <Button
-                  label={copy.common.delete}
+                  label={row.actionLabels.delete}
                   compact
                   variant="danger"
                   onPress={() =>
@@ -1178,6 +1188,52 @@ const PixelAvatar = memo(function PixelAvatar({
   );
 });
 
+function PixelMotif() {
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={styles.pixelMotif}
+    >
+      {Array.from({ length: 9 }, (_, index) => (
+        <View
+          key={index}
+          style={[
+            styles.pixelMotifCell,
+            index === 1 || index === 5 ? styles.pixelMotifCellAccent : undefined,
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+function PixelPersonaChip({
+  character,
+  row,
+}: {
+  character: PixelCharacter | undefined;
+  row: ReminderRow;
+}) {
+  return (
+    <View style={styles.personaChip}>
+      <PixelAvatar character={character} size="small" />
+      <View style={styles.personaChipCopy}>
+        <Text style={styles.personaChipLabel}>{row.personaChip.archetypeLabel}</Text>
+        <Text style={styles.personaChipMeta}>{row.personaChip.toneLabel}</Text>
+      </View>
+    </View>
+  );
+}
+
+function PixelBadge({ badge }: { badge: PixelBadgeModel }) {
+  return (
+    <Text style={[styles.badge, styles[`badge_${badge.tone}`]]} numberOfLines={1}>
+      {badge.label}
+    </Text>
+  );
+}
+
 function findCharacterById(characters: Character[], characterId: string | undefined) {
   if (characterId === undefined) {
     return undefined;
@@ -1350,6 +1406,20 @@ const styles = StyleSheet.create({
   stack: {
     gap: 14,
   },
+  onboardingHeader: {
+    gap: 12,
+    paddingVertical: 12,
+  },
+  brandRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  brandText: {
+    color: palette.teal,
+    fontSize: 17,
+    fontWeight: '900',
+  },
   heroBand: {
     backgroundColor: palette.paleTeal,
     borderColor: '#BFD8D3',
@@ -1363,6 +1433,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
+  },
+  homeHeader: {
+    alignItems: 'flex-end',
+    borderBottomColor: palette.border,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    paddingBottom: 12,
   },
   kicker: {
     color: palette.teal,
@@ -1462,6 +1541,11 @@ const styles = StyleSheet.create({
     gap: 10,
     minWidth: 0,
   },
+  reminderTitleBlock: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
   rowTitle: {
     color: palette.ink,
     flex: 1,
@@ -1469,10 +1553,22 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 23,
   },
+  rowNote: {
+    color: palette.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
   meta: {
     color: palette.muted,
     fontSize: 13,
     lineHeight: 18,
+  },
+  reminderMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'space-between',
   },
   badge: {
     backgroundColor: palette.paleCoral,
@@ -1483,6 +1579,30 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: 8,
     paddingVertical: 4,
+  },
+  badge_neutral: {
+    backgroundColor: palette.paleTeal,
+    color: palette.teal,
+  },
+  badge_selected: {
+    backgroundColor: palette.paleBlue,
+    color: palette.blue,
+  },
+  badge_locked: {
+    backgroundColor: '#FFF4CF',
+    color: palette.amber,
+  },
+  badge_success: {
+    backgroundColor: '#E4F7E7',
+    color: '#22733A',
+  },
+  badge_warning: {
+    backgroundColor: '#FFF4CF',
+    color: palette.amber,
+  },
+  badge_danger: {
+    backgroundColor: palette.paleCoral,
+    color: palette.coral,
   },
   inlineActions: {
     flexDirection: 'row',
@@ -1568,11 +1688,51 @@ const styles = StyleSheet.create({
     height: 58,
     width: 58,
   },
+  pixelMotif: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 3,
+    height: 21,
+    width: 21,
+  },
+  pixelMotifCell: {
+    backgroundColor: palette.teal,
+    height: 5,
+    width: 5,
+  },
+  pixelMotifCellAccent: {
+    backgroundColor: palette.coral,
+  },
   pixelRow: {
     flexDirection: 'row',
   },
   pixelCell: {
     borderRadius: 0,
+  },
+  personaChip: {
+    alignItems: 'center',
+    backgroundColor: palette.paleTeal,
+    borderColor: '#BFD8D3',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  personaChipCopy: {
+    gap: 1,
+  },
+  personaChipLabel: {
+    color: palette.ink,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  personaChipMeta: {
+    color: palette.muted,
+    fontSize: 11,
+    fontWeight: '700',
   },
   chatBubble: {
     borderRadius: 8,
@@ -1684,7 +1844,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   buttonCompact: {
-    minHeight: 38,
+    minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },

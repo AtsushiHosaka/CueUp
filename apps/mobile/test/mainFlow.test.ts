@@ -58,6 +58,8 @@ test('home model surfaces loading skeletons and filtered reminder rows', () => {
     createHomeScreenModel(all, now).rows.map((row) => row.personaChip.archetypeLabel),
     ['Boss型', 'Friend型'],
   );
+  assert.equal(createHomeScreenModel(all, now).rows[0]?.note, '見出しだけでも進める');
+  assert.equal(createHomeScreenModel(all, now).rows[0]?.stateBadge.label, '進行中');
   assert.equal(createHomeScreenModel(all, now).rows[1]?.stateBadge.label, 'スヌーズ');
   assert.equal(createHomeScreenModel(all, now).rows[0]?.actionLabels.snooze, '10分後');
 });

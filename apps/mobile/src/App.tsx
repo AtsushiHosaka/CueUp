@@ -70,6 +70,10 @@ export default function App() {
   const selectedCharacter = flow.characters.find(
     (character) => character.id === flow.selectedCharacterId,
   );
+  const reminderById = useMemo(
+    () => new Map(flow.reminders.map((reminder) => [reminder.id, reminder])),
+    [flow.reminders],
+  );
   const history = createHistoryScreenModel(secondary, copy);
   const chat = createChatScreenModel(secondary, selectedCharacter, copy);
   const pro = createProScreenModel(secondary, copy);
@@ -355,8 +359,11 @@ export default function App() {
   function renderOnboarding() {
     return (
       <View style={styles.stack}>
-        <View style={styles.heroBand}>
-          <Text style={styles.kicker}>CueUp</Text>
+        <View style={styles.onboardingHeader}>
+          <View style={styles.brandRow}>
+            <PixelMotif />
+            <Text style={styles.brandText}>CueUp</Text>
+          </View>
           <Text style={styles.heroTitle}>{onboarding.title}</Text>
           <Text style={styles.body}>{copy.onboarding.body}</Text>
         </View>
@@ -405,7 +412,7 @@ export default function App() {
   function renderHome() {
     return (
       <View style={styles.stack}>
-        <View style={styles.topBar}>
+        <View style={styles.homeHeader}>
           <View>
             <Text style={styles.kicker}>{copy.home.kicker}</Text>
             <Text style={styles.title}>{copy.home.title}</Text>
@@ -444,7 +451,8 @@ export default function App() {
         ) : null}
         {home.emptyState !== undefined ? (
           <View style={styles.emptyState}>
-            <Text style={styles.title}>{home.emptyState.title}</Text>
+            <PixelMotif />
+            <Text style={styles.rowTitle}>{home.emptyState.title}</Text>
             <Text style={styles.body}>{home.emptyState.body}</Text>
             <View style={styles.inlineActions}>
               <Button label={home.emptyState.actionLabel} compact onPress={openCreateReminder} />
@@ -458,24 +466,25 @@ export default function App() {
           </View>
         ) : null}
         {home.rows.map((row) => {
-          const reminder = flow.reminders.find((item) => item.id === row.id);
+          const reminder = reminderById.get(row.id);
           const character = findCharacterById(flow.characters, reminder?.characterId);
 
           return (
             <View key={row.id} style={styles.reminderRow}>
               <View style={styles.rowHeader}>
-                <View style={styles.reminderIdentity}>
-                  <PixelAvatar character={character} size="small" />
+                <View style={styles.reminderTitleBlock}>
                   <Text style={styles.rowTitle}>{row.title}</Text>
+                  {row.note !== undefined ? <Text style={styles.rowNote}>{row.note}</Text> : null}
                 </View>
-                {row.badge !== undefined ? <Text style={styles.badge}>{row.badge}</Text> : null}
+                <PixelBadge badge={row.stateBadge} />
               </View>
-              <Text style={styles.meta}>
-                {row.detail} / {row.characterName}
-              </Text>
+              <View style={styles.reminderMetaRow}>
+                <PixelPersonaChip character={character} chip={row.personaChip} />
+                <Text style={styles.meta}>{row.scheduledLabel}</Text>
+              </View>
               <View style={styles.inlineActions}>
                 <Button
-                  label={copy.home.complete}
+                  label={row.actionLabels.complete}
                   compact
                   onPress={() =>
                     updateFlow((current) => ({
@@ -485,7 +494,7 @@ export default function App() {
                   }
                 />
                 <Button
-                  label={copy.home.snoozeTenMinutes}
+                  label={row.actionLabels.snooze}
                   compact
                   variant="secondary"
                   onPress={() =>
@@ -501,14 +510,14 @@ export default function App() {
                 />
                 {reminder !== undefined ? (
                   <Button
-                    label={copy.common.edit}
+                    label={row.actionLabels.edit}
                     compact
                     variant="ghost"
                     onPress={() => openEditReminder(reminder)}
                   />
                 ) : null}
                 <Button
-                  label={copy.common.delete}
+                  label={row.actionLabels.delete}
                   compact
                   variant="danger"
                   onPress={() =>
@@ -1216,16 +1225,20 @@ const PixelAvatar = memo(function PixelAvatar({
 
 const PixelPersonaChip = memo(function PixelPersonaChip({
   chip,
+  character,
   compact = false,
 }: {
   chip: PixelPersonaChipModel;
+  character?: PixelCharacter | undefined;
   compact?: boolean;
 }) {
-  const chipCharacter = createPixelCharacterFallback(
-    chip.characterId,
-    chip.label,
-    chip.avatarVariant === 'custom' ? 'custom' : 'built_in',
-  );
+  const chipCharacter =
+    character ??
+    createPixelCharacterFallback(
+      chip.characterId,
+      chip.label,
+      chip.avatarVariant === 'custom' ? 'custom' : 'built_in',
+    );
 
   return (
     <View style={[styles.personaChip, compact ? styles.personaChipCompact : undefined]}>
@@ -1257,6 +1270,26 @@ function getPixelBadgeToneStyle(tone: PixelBadgeModel['tone']) {
   };
 
   return toneStyles[tone] ?? styles.pixelBadgeNeutral;
+}
+
+function PixelMotif() {
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={styles.pixelMotif}
+    >
+      {Array.from({ length: 9 }, (_, index) => (
+        <View
+          key={index}
+          style={[
+            styles.pixelMotifCell,
+            index === 1 || index === 5 ? styles.pixelMotifCellAccent : undefined,
+          ]}
+        />
+      ))}
+    </View>
+  );
 }
 
 function findCharacterById(characters: Character[], characterId: string | undefined) {
@@ -1431,6 +1464,20 @@ const styles = StyleSheet.create({
   stack: {
     gap: 14,
   },
+  onboardingHeader: {
+    gap: 12,
+    paddingVertical: 12,
+  },
+  brandRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  brandText: {
+    color: palette.teal,
+    fontSize: 17,
+    fontWeight: '900',
+  },
   heroBand: {
     backgroundColor: palette.paleTeal,
     borderColor: '#BFD8D3',
@@ -1444,6 +1491,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
+  },
+  homeHeader: {
+    alignItems: 'flex-end',
+    borderBottomColor: palette.border,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    paddingBottom: 12,
   },
   kicker: {
     color: palette.teal,
@@ -1563,6 +1619,11 @@ const styles = StyleSheet.create({
     gap: 10,
     minWidth: 0,
   },
+  reminderTitleBlock: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
   historyRow: {
     backgroundColor: palette.surface,
     borderColor: palette.border,
@@ -1593,10 +1654,22 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 23,
   },
+  rowNote: {
+    color: palette.muted,
+    fontSize: 14,
+    lineHeight: 20,
+  },
   meta: {
     color: palette.muted,
     fontSize: 13,
     lineHeight: 18,
+  },
+  reminderMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'space-between',
   },
   badge: {
     backgroundColor: palette.paleCoral,
@@ -1769,6 +1842,21 @@ const styles = StyleSheet.create({
     height: 58,
     width: 58,
   },
+  pixelMotif: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 3,
+    height: 21,
+    width: 21,
+  },
+  pixelMotifCell: {
+    backgroundColor: palette.teal,
+    height: 5,
+    width: 5,
+  },
+  pixelMotifCellAccent: {
+    backgroundColor: palette.coral,
+  },
   pixelRow: {
     flexDirection: 'row',
   },
@@ -1909,7 +1997,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   buttonCompact: {
-    minHeight: 38,
+    minHeight: 44,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },

@@ -40,6 +40,7 @@
 
 - [x] Run repository checks: `npm run format:check`, `npm run lint`, `npm run quality:check`, `npm test`, `npm run build`. Covers REQ-009, REQ-011.
 - [x] Run Expo iOS export: `EXPO_NO_TELEMETRY=1 npx expo export --platform ios --output-dir /private/tmp/cueup-expo-export --clear`. Covers REQ-010.
-- [x] Run Expo Go or simulator smoke QA for onboarding, Home, reminder form, character picker, History, Pro/Store, and Settings. Covers REQ-011.
+- [x] Run Expo Go or simulator smoke QA for onboarding, Home, reminder form, character picker, History, Chat, Pro/Store, and Settings. Covers REQ-011.
 - [x] Capture and review screenshots for initial and dense states, checking clipping, contrast, tap target spacing, and first-viewport reminder-list hierarchy. Covers UI-REQ-002, UI-REQ-003, UI-REQ-010.
 - [x] Document deferred pixel fonts and avatar asset decisions. Covers open questions.
+- [x] Document naming and Pro-limit deferrals against `design.md` and `release-qa.md`. Covers open questions.

@@ -74,10 +74,6 @@ export default function App() {
   const selectedCharacter = flow.characters.find(
     (character) => character.id === flow.selectedCharacterId,
   );
-  const reminderById = useMemo(
-    () => new Map(flow.reminders.map((reminder) => [reminder.id, reminder])),
-    [flow.reminders],
-  );
   const history = createHistoryScreenModel(secondary, copy);
   const chat = createChatScreenModel(secondary, selectedCharacter, copy);
   const pro = createProScreenModel(secondary, copy);
@@ -1294,26 +1290,6 @@ function getPixelBadgeToneStyle(tone: PixelBadgeModel['tone']) {
   };
 
   return toneStyles[tone] ?? styles.pixelBadgeNeutral;
-}
-
-function PixelMotif() {
-  return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={styles.pixelMotif}
-    >
-      {Array.from({ length: 9 }, (_, index) => (
-        <View
-          key={index}
-          style={[
-            styles.pixelMotifCell,
-            index === 1 || index === 5 ? styles.pixelMotifCellAccent : undefined,
-          ]}
-        />
-      ))}
-    </View>
-  );
 }
 
 function findCharacterById(characters: Character[], characterId: string | undefined) {

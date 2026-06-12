@@ -103,10 +103,11 @@ test('reminder form model handles missing required fields and free limits', () =
 
   assert.equal(createReminderFormModel(emptyTitle).validationError?.kind, 'missing_required');
   assert.equal(validateReminderDraft(atLimit)?.targetRoute, 'proUpsell');
-  assert.equal(
-    createReminderFormModel(atLimit).selectedPersonaChip.safetyLabel,
-    '架空のピクセルペルソナ',
-  );
+  const formModel = createReminderFormModel(atLimit);
+  assert.equal(formModel.selectedCharacterName, 'Strict Boss');
+  assert.equal(formModel.selectedPersonaChip.archetypeLabel, 'Boss型');
+  assert.equal(formModel.selectedPersonaChip.toneLabel, '短く強め');
+  assert.equal(formModel.selectedPersonaChip.safetyLabel, '架空のピクセルペルソナ');
 });
 
 test('character selection and creation models expose upgrade and preview states', () => {
@@ -138,21 +139,25 @@ test('character selection and creation models expose upgrade and preview states'
     ...state,
     characters: [...state.characters, otherUserCharacter],
   });
+  const selectedRow = rows.find((row) => row.id === 'character-boss');
+  const lockedRow = rows.find((row) => row.id === 'character-focus-pack');
+  const ownerOnlyRow = rows.find((row) => row.id === 'custom-other');
 
-  assert.equal(rows.find((row) => row.id === 'character-focus-pack')?.actionLabel, 'Pro で追加');
-  assert.equal(
-    rows.find((row) => row.id === 'character-focus-pack')?.availabilityLabel,
-    'Proで追加',
-  );
-  assert.equal(rows.find((row) => row.id === 'character-focus-pack')?.stateBadge.tone, 'locked');
-  assert.equal(
-    rows.find((row) => row.id === 'custom-other')?.availabilityLabel,
-    'このユーザーのみ',
-  );
-  assert.equal(rows.find((row) => row.id === 'custom-other')?.actionLabel, '利用不可');
-  assert.match(rows[0]?.safetyLabel ?? '', /実在の有名人/);
+  assert.equal(selectedRow?.availabilityLabel, '選択中');
+  assert.equal(selectedRow?.stateBadge.label, '選択中');
+  assert.equal(selectedRow?.personaChip.safetyLabel, '架空のピクセルペルソナ');
+  assert.equal(lockedRow?.actionLabel, 'Pro で追加');
+  assert.equal(lockedRow?.availabilityLabel, 'Proで追加');
+  assert.equal(lockedRow?.stateBadge.tone, 'locked');
+  assert.equal(lockedRow?.personaChip.archetypeLabel, 'Focus型');
+  assert.equal(lockedRow?.personaChip.toneLabel, '集中を保つ');
+  assert.equal(ownerOnlyRow?.availabilityLabel, 'このユーザーのみ');
+  assert.equal(ownerOnlyRow?.stateBadge.tone, 'warning');
+  assert.equal(ownerOnlyRow?.actionLabel, '利用不可');
+  assert.match(selectedRow?.safetyLabel ?? '', /実在の有名人/);
   assert.equal(createCharacterCreateModel(state).previewText, 'プレビュー生成中');
   assert.match(createCharacterCreateModel(state).safetyHelper, /架空ペルソナ/);
+  assert.match(createCharacterCreateModel(state).safetyHelper, /歌詞/);
   assert.equal(
     createCharacterCreateModel({ ...state, characterPreviewStatus: 'ready' }).canSubmit,
     true,

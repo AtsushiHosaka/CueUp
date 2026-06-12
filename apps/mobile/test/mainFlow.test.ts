@@ -99,14 +99,16 @@ test('reminder form model handles missing required fields and free limits', () =
     route: 'reminderForm' as const,
     authenticated: true,
     reminders: limitedReminders,
+    selectedCharacterId: 'character-boss',
   };
+  const atLimitModel = createReminderFormModel(atLimit);
 
   assert.equal(createReminderFormModel(emptyTitle).validationError?.kind, 'missing_required');
   assert.equal(validateReminderDraft(atLimit)?.targetRoute, 'proUpsell');
-  assert.equal(
-    createReminderFormModel(atLimit).selectedPersonaChip.safetyLabel,
-    '架空のピクセルペルソナ',
-  );
+  assert.equal(atLimitModel.selectedPersonaChip.label, 'Strict Boss');
+  assert.equal(atLimitModel.selectedPersonaChip.archetypeLabel, 'Boss型');
+  assert.equal(atLimitModel.selectedPersonaChip.toneLabel, '短く強め');
+  assert.equal(atLimitModel.selectedPersonaChip.safetyLabel, '架空のピクセルペルソナ');
 });
 
 test('character selection and creation models expose upgrade and preview states', () => {
@@ -140,6 +142,7 @@ test('character selection and creation models expose upgrade and preview states'
   });
 
   assert.equal(rows.find((row) => row.id === 'character-focus-pack')?.actionLabel, 'Pro で追加');
+  assert.equal(rows.find((row) => row.id === 'character-friend')?.availabilityLabel, '利用可能');
   assert.equal(
     rows.find((row) => row.id === 'character-focus-pack')?.availabilityLabel,
     'Proで追加',

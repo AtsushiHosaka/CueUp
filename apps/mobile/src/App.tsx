@@ -597,10 +597,13 @@ export default function App() {
         />
         <View style={styles.selectorRow}>
           <View style={styles.selectorIdentity}>
-            <PixelAvatar character={selectedCharacter} />
             <View>
               <Text style={styles.label}>{copy.reminderForm.characterLabel}</Text>
-              <Text style={styles.value}>{reminderForm.selectedCharacterName}</Text>
+              <PixelPersonaChip
+                character={selectedCharacter}
+                chip={reminderForm.selectedPersonaChip}
+                selected
+              />
             </View>
           </View>
           <Button label={copy.common.select} compact onPress={() => goTo('characterSelect')} />
@@ -623,22 +626,43 @@ export default function App() {
           </View>
           <Button label={copy.common.create} compact onPress={() => goTo('characterCreate')} />
         </View>
+        <View style={styles.safetyNotice}>
+          <Text style={styles.label}>{copy.persona.fictionalLabel}</Text>
+          <Text style={styles.meta}>{copy.persona.safetyHelper}</Text>
+        </View>
         {characterRows.map((row) => {
           const character = findCharacterById(flow.characters, row.id);
 
           return (
             <View key={row.id} style={styles.characterRow}>
               <View style={styles.characterIdentity}>
-                <PixelAvatar character={character} selected={row.selected} />
-                <View style={styles.flexColumn}>
-                  <Text style={styles.rowTitle}>{row.name}</Text>
+                <PixelPersonaChip
+                  character={character}
+                  chip={row.personaChip}
+                  selected={row.selected}
+                />
+                <View style={styles.characterCopy}>
+                  <View style={styles.characterMetaRow}>
+                    <Text style={styles.rowTitle}>{row.name}</Text>
+                    <PixelBadge badge={row.stateBadge} />
+                  </View>
                   <Text style={styles.meta}>{row.detail}</Text>
+                  <Text style={styles.meta}>
+                    {row.archetypeLabel} / {row.toneLabel}
+                  </Text>
+                  <Text style={styles.characterSafety}>{row.safetyLabel}</Text>
                 </View>
               </View>
               <Button
                 label={row.actionLabel}
                 compact
-                variant={row.availability === 'available' ? 'secondary' : 'ghost'}
+                variant={
+                  row.availability === 'available'
+                    ? row.selected
+                      ? 'ghost'
+                      : 'secondary'
+                    : 'ghost'
+                }
                 onPress={() => {
                   if (row.availability !== 'available') {
                     updateFlow((current) => ({
@@ -684,6 +708,10 @@ export default function App() {
             variant="ghost"
             onPress={() => goTo('characterSelect')}
           />
+        </View>
+        <View style={styles.safetyNotice}>
+          <Text style={styles.label}>{copy.persona.fictionalLabel}</Text>
+          <Text style={styles.meta}>{characterCreate.safetyHelper}</Text>
         </View>
         <Field
           label={copy.character.name}
@@ -1247,10 +1275,12 @@ const PixelPersonaChip = memo(function PixelPersonaChip({
   chip,
   character,
   compact = false,
+  selected = false,
 }: {
   chip: PixelPersonaChipModel;
   character?: PixelCharacter | undefined;
   compact?: boolean;
+  selected?: boolean;
 }) {
   const chipCharacter =
     character ??
@@ -1261,14 +1291,20 @@ const PixelPersonaChip = memo(function PixelPersonaChip({
     );
 
   return (
-    <View style={[styles.personaChip, compact ? styles.personaChipCompact : undefined]}>
-      <PixelAvatar character={chipCharacter} size="small" />
+    <View
+      style={[
+        styles.personaChip,
+        compact ? styles.personaChipCompact : undefined,
+        selected ? styles.personaChipSelected : undefined,
+      ]}
+    >
+      <PixelAvatar character={chipCharacter} selected={selected} size="small" />
       <View style={styles.personaChipText}>
         <Text numberOfLines={1} style={styles.personaChipLabel}>
-          {chip.archetypeLabel}
+          {chip.label}
         </Text>
         <Text numberOfLines={1} style={styles.personaChipMeta}>
-          {chip.toneLabel}
+          {chip.archetypeLabel} / {chip.toneLabel}
         </Text>
       </View>
     </View>
@@ -1755,23 +1791,46 @@ const styles = StyleSheet.create({
     gap: 12,
     minWidth: 0,
   },
+  safetyNotice: {
+    backgroundColor: palette.paleBlue,
+    borderColor: '#C8D6EA',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 6,
+    padding: 12,
+  },
   characterRow: {
-    alignItems: 'center',
+    alignItems: 'stretch',
     backgroundColor: palette.surface,
     borderColor: palette.border,
     borderRadius: 8,
     borderWidth: 1,
-    flexDirection: 'row',
     gap: 12,
-    justifyContent: 'space-between',
     padding: 14,
   },
   characterIdentity: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flex: 1,
     flexDirection: 'row',
     gap: 12,
     minWidth: 0,
+  },
+  characterCopy: {
+    flex: 1,
+    gap: 5,
+    minWidth: 0,
+  },
+  characterMetaRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  characterSafety: {
+    color: palette.teal,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
   },
   flexColumn: {
     flex: 1,
@@ -1802,6 +1861,10 @@ const styles = StyleSheet.create({
   },
   personaChipCompact: {
     backgroundColor: '#F8FAFB',
+  },
+  personaChipSelected: {
+    backgroundColor: palette.paleTeal,
+    borderColor: '#91C9BE',
   },
   personaChipText: {
     gap: 2,

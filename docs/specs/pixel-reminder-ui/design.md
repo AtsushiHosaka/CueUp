@@ -258,6 +258,9 @@ Exact type names may differ if behavior and tests are equivalent.
 
 ## Open Questions
 
+- Release gate decision, 2026-06-12: v1 keeps ordinary system fonts. Pixel fonts remain deferred until a future typography issue resolves readability, licensing, and Expo packaging.
+- Release gate decision, 2026-06-12: v1 keeps primitive React Native pixel avatars and motifs. Generated, bundled, or marketplace-style pixel avatar assets remain deferred to a future asset pipeline issue.
+- Release gate decision, 2026-06-12: v1 keeps the CueUp brand name and current shared Pro/free limits. Naming and limit changes remain separate product decisions.
 - Should the final brand name remain CueUp or change to a TapIn-like name later?
 - Should future pixel avatars be generated assets, primitive shapes, or a bundled icon set?
 - Should Pro limits be revised in shared constants to match the attached product memo, or should the UI continue displaying current backend limits?

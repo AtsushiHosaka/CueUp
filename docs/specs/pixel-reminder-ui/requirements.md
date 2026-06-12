@@ -4,13 +4,15 @@
 
 CueUp should feel like a practical reminder app first, with playful AI character nudges expressed through restrained pixel-art accents. The current mobile UI is functional but visually plain; the previous pop-star exploration overcorrected toward giant character hero cards and game-store spectacle. This spec establishes the selected direction: a reminder-list-first mobile UI where fictional famous-person-like archetypes appear as tiny pixel portraits, voice labels, and notification tone flavor.
 
-The redesign must not imply real celebrity impersonation. "Famous-person-like" means broad fictional archetypes such as Coach, Mentor, Creator, Boss, Friend, or Calm Guide, presented through small pixel avatars and copy that clearly frames them as fictional personas.
+The redesign must not imply real celebrity impersonation. "Famous-person-like" means translating the motivational reason a user might listen to a famous founder, respected creator, strict editor, trusted senior, old teacher, or close teammate into a broad fictional archetype. Pixel art softens the presentation, but it does not make real names, portraits, "本人風", sound-alike claims, catchphrases, or direct likeness acceptable.
+
+The same rule applies to familiar-person-like custom characters. The product may support the feeling of a notification from someone the user knows through relationship, tone, and role, but not through recreating a real person's identity, photo, portrait, private details, or direct imitation.
 
 ## Goals
 
 - Make reminders, folders, tags, history, and organization the primary product surface.
 - Add a distinctive pixel-art visual identity without making the app feel like a full game UI.
-- Use fictional persona flavor as a lightweight differentiator through tiny pixel portraits, chips, badges, and AI notification copy.
+- Use fictional persona flavor as a lightweight differentiator through tiny pixel portraits, chips, badges, and AI notification copy that explains why this persona would motivate action.
 - Keep login/onboarding simple and avoid unnecessary character hero content.
 - Position Pro subscription around reminder convenience: AI quota, active reminders, folders, tags, smart lists, history, sync, and chat.
 - Keep ordinary system fonts for now; pixel fonts are explicitly deferred.
@@ -29,6 +31,7 @@ The redesign must not imply real celebrity impersonation. "Famous-person-like" m
 
 - Daily reminder user: wants fast access to today's reminders and completion/snooze actions.
 - Character-curious user: wants reminders to feel more personal without losing productivity clarity.
+- Aspirational reminder user: wants a cue that feels like it came from a respected or familiar motivating presence, without real-person impersonation.
 - Pro candidate: wants to understand that paid value comes from managing more reminders, folders, tags, history, sync, and AI usage.
 - Safety-conscious user: needs to understand that personas are fictional and not real celebrity impersonations.
 
@@ -36,6 +39,7 @@ The redesign must not imply real celebrity impersonation. "Famous-person-like" m
 
 - As a daily reminder user, I want my reminders to be listed clearly, so that I can manage my day without hunting through decorative UI.
 - As a character-curious user, I want small pixel persona chips beside reminders, so that each reminder has personality without becoming a character gallery.
+- As an aspirational reminder user, I want persona options that feel like motivating roles I would listen to, so that choosing a character changes my willingness to act.
 - As a new user, I want login/onboarding to be simple, so that I can understand the product without a giant mascot or hero card.
 - As a Pro candidate, I want the upgrade screen to explain organization and usage benefits, so that I understand why subscription is useful for a reminder app.
 - As a safety-conscious user, I want the UI to call personas fictional, so that I do not mistake them for real celebrities.
@@ -47,7 +51,7 @@ The redesign must not imply real celebrity impersonation. "Famous-person-like" m
 | REQ-001 | The mobile UI shall adopt a reminder-list-first hierarchy across Home, History, and management screens.                                                                                       | Must     | User input                      |
 | REQ-002 | The mobile UI shall use pixel-art accents through small avatar chips, status badges, icons, dividers, and empty-state motifs.                                                                 | Must     | Product Design exploration      |
 | REQ-003 | The mobile UI shall keep login/onboarding simple and shall not require a large character illustration or large notification hero card.                                                        | Must     | User input                      |
-| REQ-004 | The mobile UI shall treat personas as fictional archetypes and shall not imply real celebrity impersonation.                                                                                  | Must     | Existing safety docs            |
+| REQ-004 | The mobile UI shall treat personas as fictional motivational archetypes and shall not imply real celebrity, public-figure, or acquaintance impersonation.                                     | Must     | Existing safety docs            |
 | REQ-005 | The character picker shall frame character choice as notification tone selection, not as celebrity selection.                                                                                 | Must     | User input and safety docs      |
 | REQ-006 | Pro and billing screens shall prioritize reminder organization, usage limits, history, sync, and productivity convenience over character pack merchandising.                                  | Must     | User-provided product direction |
 | REQ-007 | The redesign shall preserve current route behavior for onboarding, Home, reminder form, character selection, custom character creation, history, chat, Store, Pro, and Settings.              | Must     | Repository context              |
@@ -79,11 +83,13 @@ The redesign must not imply real celebrity impersonation. "Famous-person-like" m
 
 - The system shall use copy such as fictional persona, pixel persona, voice archetype, or localized equivalents.
 - The UI shall not show real celebrity names, public-figure names, celebrity-like portrait claims, "本人風", real-person likeness claims, trademarked character names, lyrics, or direct quotes.
-- Custom character helper copy shall warn users to create original fictional personas.
+- Built-in, pack, demo, and seed characters shall explain a motivational relationship or aspirational role, not only a generic job class.
+- Custom character helper copy shall warn users to create original fictional personas through relationship/tone abstraction instead of real-person identity recreation.
 
 ### REQ-005
 
 - When selecting a character, each option shall show a small pixel portrait/chip, archetype label, tone/trait summary, availability, and action.
+- Character names, descriptions, and prompts shall answer why receiving a notification from this kind of presence could help the user move now.
 - If a pack character is locked, then the system shall show a locked or upgrade state without implying the locked character is a real celebrity.
 - If a custom persona can be created, then the entry point shall make the original-fictional-persona rule visible.
 
@@ -171,12 +177,14 @@ These images are supporting visual references only. The normative behavior is de
 - App is an Expo React Native app without a native iOS project.
 - Current supported app platforms are iOS and Android, not web.
 - Existing safety docs reject real-person, celebrity, "本人風", portrait, trademark, lyric, and direct quote references.
+- Pixel-art abstraction does not relax likeness, public-figure, privacy, consent, or impersonation constraints.
 - Existing quality gates require accessibility, i18n, security, and representative state coverage.
 - GitHub issue implementation must follow `AGENTS.md`.
 
 ## Assumptions
 
 - The first implementation pass can use simple pixel-like square motifs and tiny abstract avatars drawn with React Native primitives or static text-free shapes.
+- Existing built-in/demo personas are placeholders and should be revised in a future implementation issue if they do not clearly express the motivational-persona logic above.
 - Pixel fonts are deferred and should not block this UI direction.
 - Current route structure is adequate.
 - Billing copy can be repositioned without changing entitlement logic.

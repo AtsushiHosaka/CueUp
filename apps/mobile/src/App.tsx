@@ -10,7 +10,6 @@ import {
   View,
 } from 'react-native';
 
-import { clientConfig } from './config/clientConfig';
 import {
   completeReminder,
   createCharacterCreateModel,
@@ -532,7 +531,6 @@ export default function App() {
           );
         })}
         <View style={styles.statusStrip}>
-          <Text style={styles.meta}>API {clientConfig.apiBaseUrl}</Text>
           <Text style={styles.meta}>
             {copy.home.freeCueLimit(FREE_PLAN_LIMITS.activeReminders)}
           </Text>

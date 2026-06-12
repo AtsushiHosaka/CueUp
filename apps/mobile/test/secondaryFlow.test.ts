@@ -133,7 +133,7 @@ test('pro and pack models expose purchase, restore, and purchased states', () =>
 
   assert.equal(createProScreenModel(failedPurchase).errorMessage, '購入に失敗しました。');
   assert.deepEqual(pro.benefits, [
-    'Cue とAI利用枠を拡張',
+    'リマインダーとAI利用枠を拡張',
     'フォルダ/タグで整理',
     '通知履歴と同期を強化',
   ]);
@@ -142,7 +142,7 @@ test('pro and pack models expose purchase, restore, and purchased states', () =>
   assert.equal(pro.benefitRows.find((row) => row.iconKey === 'folders')?.label, 'Folders & Tags');
   assert.deepEqual(
     pro.comparisonRows.map((row) => row.label),
-    ['Active Cue', 'Monthly chat', 'History', 'Folders & Tags', 'Smart Lists', 'Sync'],
+    ['アクティブリマインダー', 'Monthly chat', 'History', 'Folders & Tags', 'Smart Lists', 'Sync'],
   );
   assert.equal(
     createPackStoreScreenModel(failedRestore).errorMessage,

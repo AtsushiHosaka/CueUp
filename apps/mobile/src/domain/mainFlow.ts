@@ -614,7 +614,7 @@ function createReminderStateBadge(status: ReminderStatus, copy: UiText): PixelBa
 
   if (status === 'completed') {
     return {
-      label: copy.history.sent,
+      label: copy.home.completed,
       tone: 'success',
     };
   }
@@ -627,7 +627,7 @@ function createReminderStateBadge(status: ReminderStatus, copy: UiText): PixelBa
   }
 
   return {
-    label: copy.persona.availability.available,
+    label: copy.home.active,
     tone: 'neutral',
   };
 }

@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { getPixelAvatarTheme, getPixelAvatarVariant } from '../src/domain/pixelCharacters.js';
+import {
+  createPixelPersonaChipModel,
+  getPixelAvatarTheme,
+  getPixelAvatarVariant,
+} from '../src/domain/pixelCharacters.js';
+import { getUiText } from '../src/i18n/uiText.js';
 
 test('pixel avatar variants map seeded characters to abstract icon styles', () => {
   assert.equal(
@@ -33,4 +38,17 @@ test('custom and unknown characters keep a pixel-safe fallback', () => {
     fallback.pixels.every((row) => row.length === 8),
     true,
   );
+});
+
+test('pixel persona chip models use fictional archetype and tone copy', () => {
+  const copy = getUiText('ja');
+  const chip = createPixelPersonaChipModel(
+    { id: 'character-focus-pack', name: 'Focus Sage', type: 'pack' },
+    copy,
+  );
+
+  assert.equal(chip.avatarVariant, 'focus');
+  assert.equal(chip.archetypeLabel, 'Focus型');
+  assert.equal(chip.toneLabel, '集中を保つ');
+  assert.equal(chip.safetyLabel, '架空のピクセルペルソナ');
 });

@@ -42,6 +42,8 @@ test('history model supports loading, empty, reuse, delete, and chat affordances
   assert.equal(empty.emptyMessage, 'まだ通知履歴がありません');
   assert.equal(ready.rows[0]?.canChat, true);
   assert.equal(ready.rows[1]?.statusLabel, 'Fallback');
+  assert.equal(ready.rows[0]?.personaChip.archetypeLabel, 'Boss型');
+  assert.equal(ready.rows[1]?.statusBadge.tone, 'warning');
 });
 
 test('chat model shows first greeting, remaining quota, and AI failure handling copy', () => {
@@ -83,16 +85,34 @@ test('pro and pack models expose purchase, restore, and purchased states', () =>
     commerceStatus: mapCommerceFailure('restore'),
   };
   const purchased = markPackPurchased(createSecondaryFlowState(now), 'pack-deep-work');
+  const pro = createProScreenModel(createSecondaryFlowState(now));
 
   assert.equal(createProScreenModel(failedPurchase).errorMessage, '購入に失敗しました。');
+  assert.deepEqual(pro.benefits, [
+    'Cue とAI利用枠を拡張',
+    'フォルダ/タグで整理',
+    '通知履歴と同期を強化',
+  ]);
+  assert.equal(pro.addOnNote, 'Character Pack はStoreの追加要素として扱います。');
+  assert.equal(pro.benefitRows[0]?.priority, 'core');
+  assert.equal(pro.benefitRows.find((row) => row.iconKey === 'folders')?.label, 'Folders & Tags');
   assert.equal(
     createPackStoreScreenModel(failedRestore).errorMessage,
     '購入の復元に失敗しました。',
   );
   assert.equal(
+    createPackStoreScreenModel(createSecondaryFlowState(now)).rows[0]?.kindLabel,
+    'Add-on',
+  );
+  assert.equal(
     createPackStoreScreenModel(purchased).rows.find((row) => row.id === 'pack-deep-work')
       ?.actionLabel,
     '利用可能',
+  );
+  assert.equal(
+    createPackStoreScreenModel(purchased).rows.find((row) => row.id === 'pack-deep-work')
+      ?.stateBadge.tone,
+    'success',
   );
 });
 
@@ -107,5 +127,6 @@ test('settings model links account, plan, notifications, data deletion, legal, a
     ['account', 'plan', 'notifications', 'language', 'data', 'terms', 'privacy', 'logout'],
   );
   assert.equal(model.rows.find((row) => row.destination === 'data')?.destructive, true);
+  assert.equal(model.rows.find((row) => row.destination === 'data')?.stateBadge?.tone, 'danger');
   assert.equal(model.selectedDetail, 'データ削除へ進みます。');
 });

@@ -1,5 +1,7 @@
 import type { Character, CharacterType } from '@cueup/shared';
 
+import type { UiText } from '../i18n/uiText';
+
 export type PixelAvatarVariant =
   | 'strict'
   | 'gentle'
@@ -21,6 +23,22 @@ export type PixelAvatarTheme = {
 };
 
 export type PixelCharacter = Pick<Character, 'id' | 'name' | 'type'>;
+
+export type PixelPersonaChipModel = {
+  characterId: string;
+  label: string;
+  archetypeLabel: string;
+  toneLabel: string;
+  safetyLabel: string;
+  avatarVariant: PixelAvatarVariant;
+};
+
+export type PixelBadgeTone = 'neutral' | 'selected' | 'locked' | 'success' | 'warning' | 'danger';
+
+export type PixelBadgeModel = {
+  label: string;
+  tone: PixelBadgeTone;
+};
 
 const transparent = 'transparent';
 
@@ -232,4 +250,73 @@ export function getPixelAvatarTheme(
   character: PixelCharacter | { id?: string; name?: string; type?: CharacterType } | undefined,
 ): PixelAvatarTheme {
   return PIXEL_AVATAR_THEMES[getPixelAvatarVariant(character)];
+}
+
+export function createPixelPersonaChipModel(
+  character: PixelCharacter | { id?: string; name?: string; type?: CharacterType } | undefined,
+  copy: UiText,
+): PixelPersonaChipModel {
+  const avatarVariant = getPixelAvatarVariant(character);
+  const labels = getPersonaLabels(avatarVariant, copy);
+
+  return {
+    characterId: character?.id ?? 'character-default',
+    label: character?.name ?? copy.chat.assistantNameFallback,
+    archetypeLabel: labels.archetypeLabel,
+    toneLabel: labels.toneLabel,
+    safetyLabel: copy.persona.fictionalLabel,
+    avatarVariant,
+  };
+}
+
+function getPersonaLabels(
+  avatarVariant: PixelAvatarVariant,
+  copy: UiText,
+): Pick<PixelPersonaChipModel, 'archetypeLabel' | 'toneLabel'> {
+  if (avatarVariant === 'strict') {
+    return {
+      archetypeLabel: copy.persona.archetypes.boss,
+      toneLabel: copy.persona.tones.direct,
+    };
+  }
+
+  if (avatarVariant === 'gentle') {
+    return {
+      archetypeLabel: copy.persona.archetypes.friend,
+      toneLabel: copy.persona.tones.gentle,
+    };
+  }
+
+  if (avatarVariant === 'coach') {
+    return {
+      archetypeLabel: copy.persona.archetypes.coach,
+      toneLabel: copy.persona.tones.momentum,
+    };
+  }
+
+  if (avatarVariant === 'focus') {
+    return {
+      archetypeLabel: copy.persona.archetypes.focus,
+      toneLabel: copy.persona.tones.focused,
+    };
+  }
+
+  if (avatarVariant === 'wellness') {
+    return {
+      archetypeLabel: copy.persona.archetypes.wellness,
+      toneLabel: copy.persona.tones.calm,
+    };
+  }
+
+  if (avatarVariant === 'custom') {
+    return {
+      archetypeLabel: copy.persona.archetypes.custom,
+      toneLabel: copy.persona.tones.original,
+    };
+  }
+
+  return {
+    archetypeLabel: copy.persona.archetypes.default,
+    toneLabel: copy.persona.tones.balanced,
+  };
 }

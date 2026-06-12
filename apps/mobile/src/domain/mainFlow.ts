@@ -6,6 +6,11 @@ import {
   type ReminderStatus,
 } from '@cueup/shared';
 
+import {
+  createPixelPersonaChipModel,
+  type PixelBadgeModel,
+  type PixelPersonaChipModel,
+} from './pixelCharacters';
 import { getUiText, type UiText } from '../i18n/uiText';
 
 export type MobileRoute =
@@ -74,8 +79,18 @@ export type ReminderRow = {
   id: string;
   title: string;
   detail: string;
+  note?: string;
+  scheduledLabel: string;
   status: ReminderStatus;
   characterName: string;
+  personaChip: PixelPersonaChipModel;
+  stateBadge: PixelBadgeModel;
+  actionLabels: {
+    complete: string;
+    snooze: string;
+    edit: string;
+    delete: string;
+  };
   badge?: string;
 };
 
@@ -112,6 +127,7 @@ export type ReminderFormModel = {
   canSave: boolean;
   saveLabel: string;
   selectedCharacterName: string;
+  selectedPersonaChip: PixelPersonaChipModel;
   validationError?: FlowError;
 };
 
@@ -119,6 +135,7 @@ export type CharacterCreateModel = {
   canSubmit: boolean;
   previewStatus: 'idle' | 'generating' | 'ready';
   previewText: string;
+  safetyHelper: string;
   validationError?: FlowError;
 };
 
@@ -127,6 +144,12 @@ export type CharacterSelectRow = {
   name: string;
   detail: string;
   availability: 'available' | 'pack_required' | 'owner_only';
+  availabilityLabel: string;
+  archetypeLabel: string;
+  toneLabel: string;
+  safetyLabel: string;
+  personaChip: PixelPersonaChipModel;
+  stateBadge: PixelBadgeModel;
   selected: boolean;
   actionLabel: string;
 };
@@ -335,12 +358,14 @@ export function createReminderFormModel(
   const selectedCharacter = state.characters.find(
     (character) => character.id === state.selectedCharacterId,
   );
+  const selectedPersonaChip = createPixelPersonaChipModel(selectedCharacter, copy);
 
   return {
     mode: state.editingReminderId === undefined ? 'create' : 'edit',
     canSave: validationError === undefined && state.reminderSavingStatus !== 'saving',
     saveLabel: state.reminderSavingStatus === 'saving' ? copy.common.saving : copy.common.save,
     selectedCharacterName: selectedCharacter?.name ?? copy.reminderForm.unselectedCharacter,
+    selectedPersonaChip,
     ...(validationError !== undefined ? { validationError } : {}),
   };
 }
@@ -362,6 +387,7 @@ export function createCharacterCreateModel(
       state.characterPreviewStatus === 'generating'
         ? copy.character.previewGenerating
         : copy.character.previewReady(name),
+    safetyHelper: copy.character.createSafetyHelper,
     ...(!canSubmit
       ? {
           validationError: {
@@ -384,19 +410,36 @@ export function createCharacterSelectRows(
         : character.ownerUserId != null && character.ownerUserId !== 'user-1'
           ? 'owner_only'
           : 'available';
+    const selected = character.id === state.selectedCharacterId;
+    const personaChip = createPixelPersonaChipModel(character, copy);
+    const availabilityLabel = selected
+      ? copy.persona.availability.selected
+      : availability === 'available'
+        ? copy.persona.availability.available
+        : availability === 'pack_required'
+          ? copy.persona.availability.locked
+          : copy.persona.availability.ownerOnly;
 
     return {
       id: character.id,
       name: character.name,
       detail: character.description ?? character.relationship ?? copy.character.defaultDetail,
       availability,
-      selected: character.id === state.selectedCharacterId,
+      availabilityLabel,
+      archetypeLabel: personaChip.archetypeLabel,
+      toneLabel: personaChip.toneLabel,
+      safetyLabel: copy.persona.safetyHelper,
+      personaChip,
+      stateBadge: createAvailabilityBadge(availability, selected, copy),
+      selected,
       actionLabel:
         availability === 'available'
-          ? character.id === state.selectedCharacterId
+          ? selected
             ? copy.common.selected
             : copy.common.select
-          : copy.character.packRequiredAction,
+          : availability === 'pack_required'
+            ? copy.character.packRequiredAction
+            : copy.character.ownerOnlyAction,
     };
   });
 }
@@ -530,6 +573,7 @@ export function deleteReminder(
 
 function createReminderRow(reminder: Reminder, characters: Character[], copy: UiText): ReminderRow {
   const character = characters.find((item) => item.id === reminder.characterId);
+  const note = reminder.note;
   const scheduled = new Date(reminder.scheduledAt);
   const time = Number.isNaN(scheduled.getTime())
     ? reminder.scheduledAt
@@ -544,9 +588,79 @@ function createReminderRow(reminder: Reminder, characters: Character[], copy: Ui
     id: reminder.id,
     title: reminder.title,
     detail: time,
+    ...(note != null && note.trim().length > 0 ? { note } : {}),
+    scheduledLabel: time,
     status: reminder.status,
     characterName: character?.name ?? copy.chat.assistantNameFallback,
+    personaChip: createPixelPersonaChipModel(character, copy),
+    stateBadge: createReminderStateBadge(reminder.status, copy),
+    actionLabels: {
+      complete: copy.home.complete,
+      snooze: copy.home.snoozeTenMinutes,
+      edit: copy.common.edit,
+      delete: copy.common.delete,
+    },
     ...(reminder.status === 'snoozed' ? { badge: copy.home.filters.snoozed } : {}),
+  };
+}
+
+function createReminderStateBadge(status: ReminderStatus, copy: UiText): PixelBadgeModel {
+  if (status === 'snoozed') {
+    return {
+      label: copy.home.filters.snoozed,
+      tone: 'warning',
+    };
+  }
+
+  if (status === 'completed') {
+    return {
+      label: copy.history.sent,
+      tone: 'success',
+    };
+  }
+
+  if (status === 'deleted') {
+    return {
+      label: copy.common.delete,
+      tone: 'danger',
+    };
+  }
+
+  return {
+    label: copy.persona.availability.available,
+    tone: 'neutral',
+  };
+}
+
+function createAvailabilityBadge(
+  availability: CharacterSelectRow['availability'],
+  selected: boolean,
+  copy: UiText,
+): PixelBadgeModel {
+  if (selected) {
+    return {
+      label: copy.persona.selectedBadge,
+      tone: 'selected',
+    };
+  }
+
+  if (availability === 'pack_required') {
+    return {
+      label: copy.persona.lockedBadge,
+      tone: 'locked',
+    };
+  }
+
+  if (availability === 'owner_only') {
+    return {
+      label: copy.persona.ownerOnlyBadge,
+      tone: 'warning',
+    };
+  }
+
+  return {
+    label: copy.persona.availability.available,
+    tone: 'neutral',
   };
 }
 

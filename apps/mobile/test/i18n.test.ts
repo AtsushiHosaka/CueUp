@@ -18,6 +18,16 @@ test('getUiText falls back to Japanese for unsupported locales', () => {
   assert.equal(getUiText('fr-FR').settings.title, '設定');
 });
 
+test('pixel persona copy frames characters as fictional and original', () => {
+  const ja = getUiText('ja');
+  const en = getUiText('en');
+
+  assert.match(ja.persona.safetyHelper, /架空/);
+  assert.match(ja.persona.customSafetyHelper, /実在人物/);
+  assert.match(en.persona.safetyHelper, /fictional/i);
+  assert.match(en.persona.customSafetyHelper, /real people/i);
+});
+
 test('domain screen models render English copy when supplied', () => {
   const en = getUiText('en-US');
 

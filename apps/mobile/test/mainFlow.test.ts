@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { FREE_PLAN_LIMITS, type Reminder } from '@cueup/shared';
+import { FREE_PLAN_LIMITS, type Character, type Reminder } from '@cueup/shared';
 
 import {
   createCharacterCreateModel,
@@ -54,6 +54,12 @@ test('home model surfaces loading skeletons and filtered reminder rows', () => {
     createHomeScreenModel(all, now).rows.map((row) => row.title),
     ['提案書の1ページ目を書く', '肩を回して水を飲む'],
   );
+  assert.deepEqual(
+    createHomeScreenModel(all, now).rows.map((row) => row.personaChip.archetypeLabel),
+    ['Boss型', 'Friend型'],
+  );
+  assert.equal(createHomeScreenModel(all, now).rows[1]?.stateBadge.label, 'スヌーズ');
+  assert.equal(createHomeScreenModel(all, now).rows[0]?.actionLabels.snooze, '10分後');
 });
 
 test('reminder form model handles missing required fields and free limits', () => {
@@ -78,6 +84,10 @@ test('reminder form model handles missing required fields and free limits', () =
 
   assert.equal(createReminderFormModel(emptyTitle).validationError?.kind, 'missing_required');
   assert.equal(validateReminderDraft(atLimit)?.targetRoute, 'proUpsell');
+  assert.equal(
+    createReminderFormModel(atLimit).selectedPersonaChip.safetyLabel,
+    '架空のピクセルペルソナ',
+  );
 });
 
 test('character selection and creation models expose upgrade and preview states', () => {
@@ -92,12 +102,38 @@ test('character selection and creation models expose upgrade and preview states'
       tone: 'direct but kind',
     },
   };
+  const otherUserCharacter: Character = {
+    id: 'custom-other',
+    ownerUserId: 'user-2',
+    type: 'custom',
+    name: 'Other Mentor',
+    relationship: 'mentor',
+    tone: 'calm',
+    personaPrompt: 'Original fictional persona.',
+    strictness: 4,
+    warmth: 7,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
+  const rows = createCharacterSelectRows({
+    ...state,
+    characters: [...state.characters, otherUserCharacter],
+  });
 
+  assert.equal(rows.find((row) => row.id === 'character-focus-pack')?.actionLabel, 'Pro で追加');
   assert.equal(
-    createCharacterSelectRows(state).find((row) => row.id === 'character-focus-pack')?.actionLabel,
-    'Pro で追加',
+    rows.find((row) => row.id === 'character-focus-pack')?.availabilityLabel,
+    'Proで追加',
   );
+  assert.equal(rows.find((row) => row.id === 'character-focus-pack')?.stateBadge.tone, 'locked');
+  assert.equal(
+    rows.find((row) => row.id === 'custom-other')?.availabilityLabel,
+    'このユーザーのみ',
+  );
+  assert.equal(rows.find((row) => row.id === 'custom-other')?.actionLabel, '利用不可');
+  assert.match(rows[0]?.safetyLabel ?? '', /実在の有名人/);
   assert.equal(createCharacterCreateModel(state).previewText, 'プレビュー生成中');
+  assert.match(createCharacterCreateModel(state).safetyHelper, /架空ペルソナ/);
   assert.equal(
     createCharacterCreateModel({ ...state, characterPreviewStatus: 'ready' }).canSubmit,
     true,

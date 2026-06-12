@@ -108,9 +108,20 @@ test('pro and pack models expose purchase, restore, and purchased states', () =>
   assert.equal(pro.addOnNote, 'Character Pack はStoreの追加要素として扱います。');
   assert.equal(pro.benefitRows[0]?.priority, 'core');
   assert.equal(pro.benefitRows.find((row) => row.iconKey === 'folders')?.label, 'Folders & Tags');
+  assert.deepEqual(
+    pro.comparisonRows.map((row) => row.label),
+    ['Active Cue', 'Monthly chat', 'History', 'Folders & Tags', 'Smart Lists', 'Sync'],
+  );
   assert.equal(
     createPackStoreScreenModel(failedRestore).errorMessage,
     '購入の復元に失敗しました。',
+  );
+  assert.equal(
+    createPackStoreScreenModel({
+      ...createSecondaryFlowState(now),
+      commerceStatus: 'loading',
+    }).isLoading,
+    true,
   );
   assert.equal(
     createPackStoreScreenModel(createSecondaryFlowState(now)).rows[0]?.kindLabel,

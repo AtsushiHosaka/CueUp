@@ -5,6 +5,11 @@ import {
   type GenerationStatus,
 } from '@cueup/shared';
 
+import {
+  createPixelPersonaChipModel,
+  type PixelBadgeModel,
+  type PixelPersonaChipModel,
+} from './pixelCharacters';
 import { getUiText, type UiText } from '../i18n/uiText';
 
 export type CommerceStatus = 'idle' | 'loading' | 'purchased' | 'failed' | 'restore_failed';
@@ -58,9 +63,17 @@ export type HistoryScreenModel = {
   rows: Array<{
     id: string;
     title: string;
+    body: string;
     detail: string;
+    personaChip: PixelPersonaChipModel;
     canChat: boolean;
     statusLabel: string;
+    statusBadge: PixelBadgeModel;
+    actionLabels: {
+      reuse: string;
+      chat: string;
+      delete: string;
+    };
   }>;
   errorMessage?: string;
 };
@@ -81,6 +94,14 @@ export type ChatScreenModel = {
 export type ProScreenModel = {
   title: string;
   benefits: string[];
+  benefitRows: Array<{
+    label: string;
+    free: string;
+    pro: string;
+    iconKey: 'active' | 'ai' | 'history' | 'folders' | 'smartLists' | 'sync';
+    priority: 'core' | 'supporting';
+  }>;
+  addOnNote: string;
   comparisonRows: Array<{
     label: string;
     free: string;
@@ -99,6 +120,8 @@ export type PackStoreScreenModel = {
     description: string;
     priceLabel: string;
     available: boolean;
+    kindLabel: string;
+    stateBadge: PixelBadgeModel;
     actionLabel: string;
   }>;
   errorMessage?: string;
@@ -110,6 +133,7 @@ export type SettingsScreenModel = {
     title: string;
     detail: string;
     destructive: boolean;
+    stateBadge?: PixelBadgeModel;
   }>;
   selectedDetail?: string;
 };
@@ -211,9 +235,24 @@ export function createHistoryScreenModel(
     rows: state.historyItems.map((item) => ({
       id: item.id,
       title: item.body,
+      body: item.body,
       detail: `${item.characterName} / ${item.sentAt ?? copy.history.unsent}`,
+      personaChip: createPixelPersonaChipModel(
+        {
+          id: item.characterId,
+          name: item.characterName,
+          type: 'built_in',
+        },
+        copy,
+      ),
       canChat: item.characterId.trim().length > 0,
-      statusLabel: item.generationStatus === 'fallback' ? copy.history.fallback : copy.history.sent,
+      statusLabel: createHistoryStatusLabel(item.generationStatus, copy),
+      statusBadge: createHistoryStatusBadge(item.generationStatus, copy),
+      actionLabels: {
+        reuse: copy.history.reuse,
+        chat: copy.history.chat,
+        delete: copy.common.delete,
+      },
     })),
   };
 }
@@ -256,6 +295,51 @@ export function createProScreenModel(
   return {
     title: copy.pro.title,
     benefits: copy.pro.benefits,
+    benefitRows: [
+      {
+        label: copy.pro.activeCue,
+        free: `${FREE_PLAN_LIMITS.activeReminders}`,
+        pro: '1000',
+        iconKey: 'active',
+        priority: 'core',
+      },
+      {
+        label: copy.pro.monthlyChat,
+        free: `${FREE_PLAN_LIMITS.monthlyChats}`,
+        pro: '500',
+        iconKey: 'ai',
+        priority: 'core',
+      },
+      {
+        label: copy.pro.history,
+        free: copy.pro.historyDays(FREE_PLAN_LIMITS.notificationHistoryDays),
+        pro: copy.pro.unlimited,
+        iconKey: 'history',
+        priority: 'core',
+      },
+      {
+        label: copy.pro.foldersTags,
+        free: copy.pro.basic,
+        pro: copy.pro.included,
+        iconKey: 'folders',
+        priority: 'supporting',
+      },
+      {
+        label: copy.pro.smartLists,
+        free: copy.pro.unavailable,
+        pro: copy.pro.included,
+        iconKey: 'smartLists',
+        priority: 'supporting',
+      },
+      {
+        label: copy.pro.sync,
+        free: '1',
+        pro: copy.pro.multiDevice,
+        iconKey: 'sync',
+        priority: 'supporting',
+      },
+    ],
+    addOnNote: copy.pro.addOnNote,
     comparisonRows: [
       {
         label: copy.pro.activeCue,
@@ -294,6 +378,11 @@ export function createPackStoreScreenModel(
         description: pack.description,
         priceLabel: pack.priceLabel,
         available,
+        kindLabel: copy.packs.addOnLabel,
+        stateBadge: {
+          label: available ? copy.packs.available : copy.packs.addOnLabel,
+          tone: available ? 'success' : 'neutral',
+        },
         actionLabel: available ? copy.packs.available : copy.packs.purchase,
       };
     }),
@@ -305,7 +394,7 @@ export function createSettingsScreenModel(
   state: SecondaryFlowState,
   copy: UiText = defaultCopy,
 ): SettingsScreenModel {
-  const rows = [
+  const rows: SettingsScreenModel['rows'] = [
     {
       destination: 'account' as const,
       title: copy.settings.rows.account.title,
@@ -335,6 +424,10 @@ export function createSettingsScreenModel(
       title: copy.settings.rows.data.title,
       detail: copy.settings.rows.data.detail,
       destructive: true,
+      stateBadge: {
+        label: copy.accessibility.destructiveAction,
+        tone: 'danger',
+      },
     },
     {
       destination: 'terms' as const,
@@ -353,6 +446,10 @@ export function createSettingsScreenModel(
       title: copy.settings.rows.logout.title,
       detail: copy.settings.rows.logout.detail,
       destructive: true,
+      stateBadge: {
+        label: copy.accessibility.destructiveAction,
+        tone: 'danger',
+      },
     },
   ];
   const selected = rows.find((row) => row.destination === state.settingsSelection);
@@ -431,4 +528,37 @@ function commerceError(state: SecondaryFlowState, copy: UiText): { errorMessage?
   }
 
   return {};
+}
+
+function createHistoryStatusBadge(status: GenerationStatus, copy: UiText): PixelBadgeModel {
+  if (status === 'fallback') {
+    return {
+      label: copy.history.fallback,
+      tone: 'warning',
+    };
+  }
+
+  if (status === 'failed') {
+    return {
+      label: copy.history.failed,
+      tone: 'danger',
+    };
+  }
+
+  return {
+    label: copy.history.sent,
+    tone: 'success',
+  };
+}
+
+function createHistoryStatusLabel(status: GenerationStatus, copy: UiText): string {
+  if (status === 'fallback') {
+    return copy.history.fallback;
+  }
+
+  if (status === 'failed') {
+    return copy.history.failed;
+  }
+
+  return copy.history.sent;
 }

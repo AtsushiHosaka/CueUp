@@ -20,6 +20,39 @@ export type UiText = {
     select: string;
     selected: string;
   };
+  persona: {
+    fictionalLabel: string;
+    safetyHelper: string;
+    customSafetyHelper: string;
+    selectedBadge: string;
+    lockedBadge: string;
+    ownerOnlyBadge: string;
+    availability: {
+      available: string;
+      selected: string;
+      locked: string;
+      ownerOnly: string;
+    };
+    archetypes: {
+      boss: string;
+      friend: string;
+      coach: string;
+      focus: string;
+      wellness: string;
+      creator: string;
+      custom: string;
+      default: string;
+    };
+    tones: {
+      direct: string;
+      gentle: string;
+      momentum: string;
+      focused: string;
+      calm: string;
+      original: string;
+      balanced: string;
+    };
+  };
   onboarding: {
     title: string;
     body: string;
@@ -77,7 +110,9 @@ export type UiText = {
     defaultNewName: string;
     defaultDetail: string;
     packRequiredAction: string;
+    ownerOnlyAction: string;
     validationMissingCore: string;
+    createSafetyHelper: string;
     previewReady: (name: string) => string;
   };
   history: {
@@ -93,6 +128,7 @@ export type UiText = {
     unsent: string;
     sent: string;
     fallback: string;
+    failed: string;
   };
   chat: {
     kicker: string;
@@ -113,6 +149,15 @@ export type UiText = {
     kicker: string;
     title: string;
     benefits: string[];
+    organizationBenefits: string[];
+    addOnNote: string;
+    foldersTags: string;
+    smartLists: string;
+    sync: string;
+    basic: string;
+    included: string;
+    multiDevice: string;
+    unavailable: string;
     activeCue: string;
     monthlyChat: string;
     history: string;
@@ -128,6 +173,7 @@ export type UiText = {
   packs: {
     kicker: string;
     title: string;
+    addOnLabel: string;
     restore: string;
     available: string;
     purchase: string;
@@ -239,6 +285,40 @@ export const uiText = {
       select: '選択',
       selected: '選択中',
     },
+    persona: {
+      fictionalLabel: '架空のピクセルペルソナ',
+      safetyHelper: '実在の有名人や本人風ではなく、CueUp内の架空ペルソナとして通知に使います。',
+      customSafetyHelper:
+        'オリジナルの架空ペルソナとして作成してください。実在人物、本人風、肖像、商標、歌詞、引用は使えません。',
+      selectedBadge: '選択中',
+      lockedBadge: 'Pro',
+      ownerOnlyBadge: '本人のみ',
+      availability: {
+        available: '利用可能',
+        selected: '選択中',
+        locked: 'Proで追加',
+        ownerOnly: 'このユーザーのみ',
+      },
+      archetypes: {
+        boss: 'Boss型',
+        friend: 'Friend型',
+        coach: 'Coach型',
+        focus: 'Focus型',
+        wellness: 'Calm型',
+        creator: 'Creator型',
+        custom: 'Custom型',
+        default: 'Guide型',
+      },
+      tones: {
+        direct: '短く強め',
+        gentle: 'やさしく再開',
+        momentum: '勢いづけ',
+        focused: '集中を保つ',
+        calm: '落ち着いて整える',
+        original: 'オリジナル',
+        balanced: 'バランス型',
+      },
+    },
     onboarding: {
       title: 'CueUp を始める',
       body: 'キャラクターの声で、忘れたくない行動を短く受け取れます。',
@@ -296,7 +376,9 @@ export const uiText = {
       defaultNewName: '新しいキャラクター',
       defaultDetail: 'Cue の通知文に使う声',
       packRequiredAction: 'Pro で追加',
+      ownerOnlyAction: '利用不可',
       validationMissingCore: '名前、関係性、話し方を入力してください。',
+      createSafetyHelper: '実在人物ではなく、オリジナルの架空ペルソナとして作成します。',
       previewReady: (name: string) => `${name} が、次の一歩を短く促します。`,
     },
     history: {
@@ -312,6 +394,7 @@ export const uiText = {
       unsent: '未送信',
       sent: 'Sent',
       fallback: 'Fallback',
+      failed: 'Failed',
     },
     chat: {
       kicker: 'Chat',
@@ -332,11 +415,21 @@ export const uiText = {
     pro: {
       kicker: 'Pro',
       title: 'CueUp Pro',
-      benefits: [
-        'Cue とチャット上限を拡張',
-        '通知履歴を長く保存',
-        'Character Pack を使いやすく管理',
+      benefits: ['Cue とAI利用枠を拡張', 'フォルダ/タグで整理', '通知履歴と同期を強化'],
+      organizationBenefits: [
+        'アクティブCueを増やす',
+        'フォルダとタグで整理する',
+        '履歴とチャットを長く使う',
+        '複数端末で同期する',
       ],
+      addOnNote: 'Character Pack はStoreの追加要素として扱います。',
+      foldersTags: 'Folders & Tags',
+      smartLists: 'Smart Lists',
+      sync: 'Sync',
+      basic: 'Basic',
+      included: '利用可',
+      multiDevice: '複数端末',
+      unavailable: '-',
       activeCue: 'Active Cue',
       monthlyChat: 'Monthly chat',
       history: 'History',
@@ -352,6 +445,7 @@ export const uiText = {
     packs: {
       kicker: 'Store',
       title: 'Character Pack',
+      addOnLabel: 'Add-on',
       restore: '復元',
       available: '利用可能',
       purchase: '購入',
@@ -459,6 +553,41 @@ export const uiText = {
       select: 'Select',
       selected: 'Selected',
     },
+    persona: {
+      fictionalLabel: 'Fictional pixel persona',
+      safetyHelper:
+        'CueUp uses fictional personas for reminders, not real celebrities or sound-alikes.',
+      customSafetyHelper:
+        'Create an original fictional persona. Do not use real people, sound-alikes, likenesses, trademarks, lyrics, or direct quotes.',
+      selectedBadge: 'Selected',
+      lockedBadge: 'Pro',
+      ownerOnlyBadge: 'Owner only',
+      availability: {
+        available: 'Available',
+        selected: 'Selected',
+        locked: 'Add with Pro',
+        ownerOnly: 'Owner only',
+      },
+      archetypes: {
+        boss: 'Boss type',
+        friend: 'Friend type',
+        coach: 'Coach type',
+        focus: 'Focus type',
+        wellness: 'Calm type',
+        creator: 'Creator type',
+        custom: 'Custom type',
+        default: 'Guide type',
+      },
+      tones: {
+        direct: 'Short and direct',
+        gentle: 'Gentle restart',
+        momentum: 'Momentum nudge',
+        focused: 'Focused support',
+        calm: 'Calm reset',
+        original: 'Original',
+        balanced: 'Balanced',
+      },
+    },
     onboarding: {
       title: 'Start CueUp',
       body: 'Receive short action cues in the voice of your chosen character.',
@@ -516,7 +645,9 @@ export const uiText = {
       defaultNewName: 'New character',
       defaultDetail: 'Voice used for Cue notifications',
       packRequiredAction: 'Add with Pro',
+      ownerOnlyAction: 'Unavailable',
       validationMissingCore: 'Enter a name, relationship, and speaking style.',
+      createSafetyHelper: 'Create an original fictional persona, not a real person.',
       previewReady: (name: string) => `${name} will nudge the next step briefly.`,
     },
     history: {
@@ -532,6 +663,7 @@ export const uiText = {
       unsent: 'Unsent',
       sent: 'Sent',
       fallback: 'Fallback',
+      failed: 'Failed',
     },
     chat: {
       kicker: 'Chat',
@@ -554,10 +686,24 @@ export const uiText = {
       kicker: 'Pro',
       title: 'CueUp Pro',
       benefits: [
-        'Raise Cue and chat limits',
-        'Keep notification history longer',
-        'Manage Character Packs more easily',
+        'Raise Cue and AI limits',
+        'Organize with folders and tags',
+        'Extend history and sync',
       ],
+      organizationBenefits: [
+        'Increase active Cues',
+        'Organize with folders and tags',
+        'Keep history and chat longer',
+        'Sync across devices',
+      ],
+      addOnNote: 'Character Packs stay in Store as optional add-ons.',
+      foldersTags: 'Folders & Tags',
+      smartLists: 'Smart Lists',
+      sync: 'Sync',
+      basic: 'Basic',
+      included: 'Included',
+      multiDevice: 'Multi-device',
+      unavailable: '-',
       activeCue: 'Active Cue',
       monthlyChat: 'Monthly chat',
       history: 'History',
@@ -573,6 +719,7 @@ export const uiText = {
     packs: {
       kicker: 'Store',
       title: 'Character Pack',
+      addOnLabel: 'Add-on',
       restore: 'Restore',
       available: 'Available',
       purchase: 'Purchase',

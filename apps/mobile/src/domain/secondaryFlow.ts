@@ -5,6 +5,8 @@ import {
   type GenerationStatus,
 } from '@cueup/shared';
 
+import { getUiText, type UiText } from '../i18n/uiText';
+
 export type CommerceStatus = 'idle' | 'loading' | 'purchased' | 'failed' | 'restore_failed';
 export type ChatUiStatus = 'idle' | 'loading' | 'failed';
 
@@ -44,6 +46,7 @@ export type SettingsDestination =
   | 'account'
   | 'plan'
   | 'notifications'
+  | 'language'
   | 'data'
   | 'terms'
   | 'privacy'
@@ -112,30 +115,34 @@ export type SettingsScreenModel = {
 };
 
 const demoNow = '2026-06-01T00:00:00.000Z';
+const defaultCopy = getUiText('ja');
 
-export function createSecondaryFlowState(now: string = demoNow): SecondaryFlowState {
+export function createSecondaryFlowState(
+  now: string = demoNow,
+  copy: UiText = defaultCopy,
+): SecondaryFlowState {
   return {
     historyStatus: 'idle',
-    historyItems: createDemoHistory(now),
+    historyItems: createDemoHistory(now, copy),
     chatStatus: 'idle',
     chatMessages: [],
     chatInput: '',
     remainingFreeChats: FREE_PLAN_LIMITS.monthlyChats,
-    packs: createDemoPacks(),
+    packs: createDemoPacks(copy),
     purchasedPackIds: [],
     commerceStatus: 'idle',
     settingsSelection: undefined,
   };
 }
 
-export function createDemoHistory(now: string): HistoryItem[] {
+export function createDemoHistory(now: string, copy: UiText = defaultCopy): HistoryItem[] {
   return [
     {
       id: 'history-1',
       reminderId: 'reminder-proposal',
       characterId: 'character-boss',
       characterName: 'Strict Boss',
-      body: '最初の段落だけ書け。完璧さは後でいい。',
+      body: copy.demo.history.bossBody,
       generationStatus: 'success',
       sentAt: now,
       createdAt: now,
@@ -145,7 +152,7 @@ export function createDemoHistory(now: string): HistoryItem[] {
       reminderId: 'reminder-stretch',
       characterId: 'character-friend',
       characterName: 'Gentle Friend',
-      body: '一度立って、水を飲んだら戻ってこよう。',
+      body: copy.demo.history.friendBody,
       generationStatus: 'fallback',
       sentAt: null,
       createdAt: now,
@@ -153,26 +160,29 @@ export function createDemoHistory(now: string): HistoryItem[] {
   ];
 }
 
-export function createDemoPacks(): CharacterPack[] {
+export function createDemoPacks(copy: UiText = defaultCopy): CharacterPack[] {
   return [
     {
       id: 'pack-deep-work',
       name: 'Deep Work Pack',
-      description: '集中、締切、長い作業向けの声を追加します。',
+      description: copy.demo.packs.deepWorkDescription,
       priceLabel: '¥480',
       characterIds: ['character-focus-pack'],
     },
     {
       id: 'pack-wellness',
       name: 'Wellness Pack',
-      description: '休憩、睡眠、運動をやさしく促します。',
+      description: copy.demo.packs.wellnessDescription,
       priceLabel: '¥480',
       characterIds: ['character-breathe-pack'],
     },
   ];
 }
 
-export function createHistoryScreenModel(state: SecondaryFlowState): HistoryScreenModel {
+export function createHistoryScreenModel(
+  state: SecondaryFlowState,
+  copy: UiText = defaultCopy,
+): HistoryScreenModel {
   if (state.historyStatus === 'loading') {
     return {
       isLoading: true,
@@ -184,14 +194,14 @@ export function createHistoryScreenModel(state: SecondaryFlowState): HistoryScre
     return {
       isLoading: false,
       rows: [],
-      errorMessage: '通知履歴を読み込めませんでした。',
+      errorMessage: copy.history.loadFailed,
     };
   }
 
   if (state.historyItems.length === 0) {
     return {
       isLoading: false,
-      emptyMessage: 'まだ通知履歴がありません',
+      emptyMessage: copy.history.empty,
       rows: [],
     };
   }
@@ -201,9 +211,9 @@ export function createHistoryScreenModel(state: SecondaryFlowState): HistoryScre
     rows: state.historyItems.map((item) => ({
       id: item.id,
       title: item.body,
-      detail: `${item.characterName} / ${item.sentAt ?? '未送信'}`,
+      detail: `${item.characterName} / ${item.sentAt ?? copy.history.unsent}`,
       canChat: item.characterId.trim().length > 0,
-      statusLabel: item.generationStatus === 'fallback' ? 'Fallback' : 'Sent',
+      statusLabel: item.generationStatus === 'fallback' ? copy.history.fallback : copy.history.sent,
     })),
   };
 }
@@ -211,15 +221,16 @@ export function createHistoryScreenModel(state: SecondaryFlowState): HistoryScre
 export function createChatScreenModel(
   state: SecondaryFlowState,
   character: Character | undefined,
+  copy: UiText = defaultCopy,
 ): ChatScreenModel {
-  const characterName = character?.name ?? 'Character';
+  const characterName = character?.name ?? copy.chat.assistantNameFallback;
 
   return {
     characterName,
-    remainingLabel: `残り無料 ${state.remainingFreeChats} 回`,
+    remainingLabel: copy.chat.remainingFree(state.remainingFreeChats),
     ...(state.chatMessages.length === 0
       ? {
-          emptyGreeting: `${characterName}: まず今つまずいていることを一言で送ってください。`,
+          emptyGreeting: copy.chat.emptyGreeting(characterName),
         }
       : {}),
     messages: state.chatMessages
@@ -231,41 +242,47 @@ export function createChatScreenModel(
       })),
     ...(state.chatStatus === 'failed'
       ? {
-          errorMessage: '応答を取得できませんでした。',
+          errorMessage: copy.chat.aiFailed,
         }
       : {}),
     canSend: state.chatInput.trim().length > 0 && state.chatStatus !== 'loading',
   };
 }
 
-export function createProScreenModel(state: SecondaryFlowState): ProScreenModel {
+export function createProScreenModel(
+  state: SecondaryFlowState,
+  copy: UiText = defaultCopy,
+): ProScreenModel {
   return {
-    title: 'CueUp Pro',
-    benefits: ['Cue とチャット上限を拡張', '通知履歴を長く保存', 'Character Pack を使いやすく管理'],
+    title: copy.pro.title,
+    benefits: copy.pro.benefits,
     comparisonRows: [
       {
-        label: 'Active Cue',
+        label: copy.pro.activeCue,
         free: `${FREE_PLAN_LIMITS.activeReminders}`,
         pro: '1000',
       },
       {
-        label: 'Monthly chat',
+        label: copy.pro.monthlyChat,
         free: `${FREE_PLAN_LIMITS.monthlyChats}`,
         pro: '500',
       },
       {
-        label: 'History',
-        free: `${FREE_PLAN_LIMITS.notificationHistoryDays} days`,
-        pro: 'Unlimited',
+        label: copy.pro.history,
+        free: copy.pro.historyDays(FREE_PLAN_LIMITS.notificationHistoryDays),
+        pro: copy.pro.unlimited,
       },
     ],
-    purchaseLabel: state.commerceStatus === 'loading' ? '購入中' : 'Pro を購入',
-    restoreLabel: '購入を復元',
-    ...commerceError(state),
+    purchaseLabel: state.commerceStatus === 'loading' ? copy.pro.purchasing : copy.pro.purchase,
+    restoreLabel: copy.pro.restore,
+    ...commerceError(state, copy),
   };
 }
 
-export function createPackStoreScreenModel(state: SecondaryFlowState): PackStoreScreenModel {
+export function createPackStoreScreenModel(
+  state: SecondaryFlowState,
+  copy: UiText = defaultCopy,
+): PackStoreScreenModel {
   return {
     isLoading: state.commerceStatus === 'loading',
     rows: state.packs.map((pack) => {
@@ -277,55 +294,64 @@ export function createPackStoreScreenModel(state: SecondaryFlowState): PackStore
         description: pack.description,
         priceLabel: pack.priceLabel,
         available,
-        actionLabel: available ? '利用可能' : '購入',
+        actionLabel: available ? copy.packs.available : copy.packs.purchase,
       };
     }),
-    ...commerceError(state),
+    ...commerceError(state, copy),
   };
 }
 
-export function createSettingsScreenModel(state: SecondaryFlowState): SettingsScreenModel {
+export function createSettingsScreenModel(
+  state: SecondaryFlowState,
+  copy: UiText = defaultCopy,
+): SettingsScreenModel {
   const rows = [
     {
       destination: 'account' as const,
-      title: 'アカウント',
-      detail: 'ログイン情報とセッション',
+      title: copy.settings.rows.account.title,
+      detail: copy.settings.rows.account.detail,
       destructive: false,
     },
     {
       destination: 'plan' as const,
-      title: 'プラン管理',
-      detail: 'Pro と購入履歴',
+      title: copy.settings.rows.plan.title,
+      detail: copy.settings.rows.plan.detail,
       destructive: false,
     },
     {
       destination: 'notifications' as const,
-      title: '通知設定',
-      detail: '許可状態と配信時間',
+      title: copy.settings.rows.notifications.title,
+      detail: copy.settings.rows.notifications.detail,
+      destructive: false,
+    },
+    {
+      destination: 'language' as const,
+      title: copy.settings.rows.language.title,
+      detail: copy.settings.rows.language.detail,
       destructive: false,
     },
     {
       destination: 'data' as const,
-      title: 'データ削除',
-      detail: '履歴とアカウント削除',
+      title: copy.settings.rows.data.title,
+      detail: copy.settings.rows.data.detail,
       destructive: true,
     },
     {
       destination: 'terms' as const,
-      title: '利用規約',
-      detail: '法的文書',
+      title: copy.settings.rows.terms.title,
+      detail: copy.settings.rows.terms.detail,
       destructive: false,
     },
     {
       destination: 'privacy' as const,
-      title: 'プライバシーポリシー',
-      detail: 'データの扱い',
+      title: copy.settings.rows.privacy.title,
+      detail: copy.settings.rows.privacy.detail,
       destructive: false,
     },
     {
       destination: 'logout' as const,
-      title: 'ログアウト',
-      detail: 'この端末のセッションを終了',
+      title: copy.settings.rows.logout.title,
+      detail: copy.settings.rows.logout.detail,
       destructive: true,
     },
   ];
@@ -335,7 +361,7 @@ export function createSettingsScreenModel(state: SecondaryFlowState): SettingsSc
     rows,
     ...(selected !== undefined
       ? {
-          selectedDetail: `${selected.title}へ進みます。`,
+          selectedDetail: copy.settings.selectedDetail(selected.title),
         }
       : {}),
   };
@@ -359,6 +385,7 @@ export function appendChatExchange(
     body: string;
     now: string;
   },
+  copy: UiText = defaultCopy,
 ): SecondaryFlowState {
   const userMessage: ChatMessage = {
     id: `chat-user-${state.chatMessages.length + 1}`,
@@ -373,7 +400,7 @@ export function appendChatExchange(
     userId: params.userId,
     characterId: params.characterId,
     role: 'assistant',
-    body: '今できる最小単位に切って、次の5分だけ進めましょう。',
+    body: copy.chat.assistantReply,
     createdAt: params.now,
   };
 
@@ -390,16 +417,16 @@ export function mapCommerceFailure(kind: 'purchase' | 'restore'): CommerceStatus
   return kind === 'purchase' ? 'failed' : 'restore_failed';
 }
 
-function commerceError(state: SecondaryFlowState): { errorMessage?: string } {
+function commerceError(state: SecondaryFlowState, copy: UiText): { errorMessage?: string } {
   if (state.commerceStatus === 'failed') {
     return {
-      errorMessage: '購入に失敗しました。',
+      errorMessage: copy.commerce.purchaseFailed,
     };
   }
 
   if (state.commerceStatus === 'restore_failed') {
     return {
-      errorMessage: '購入の復元に失敗しました。',
+      errorMessage: copy.commerce.restoreFailed,
     };
   }
 

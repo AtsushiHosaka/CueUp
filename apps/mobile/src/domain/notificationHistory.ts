@@ -1,5 +1,7 @@
 import type { GenerationStatus } from '@cueup/shared';
 
+import { getUiText, type UiText } from '../i18n/uiText';
+
 export type NotificationHistoryViewItem = {
   id: string;
   reminderId: string;
@@ -25,18 +27,19 @@ export type NotificationHistoryViewState =
 
 export function createNotificationHistoryViewState(
   items: NotificationHistoryViewItem[],
+  copy: UiText = getUiText('ja'),
 ): NotificationHistoryViewState {
   if (items.length === 0) {
     return {
       status: 'empty',
-      emptyMessage: 'まだ通知履歴がありません',
+      emptyMessage: copy.history.empty,
       items: [],
     };
   }
 
   return {
     status: 'ready',
-    emptyMessage: 'まだ通知履歴がありません',
+    emptyMessage: copy.history.empty,
     items,
   };
 }

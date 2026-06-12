@@ -68,7 +68,7 @@ test('chat model shows first greeting, remaining quota, and AI failure handling 
     empty.emptyGreeting,
     'Strict Boss: まず今つまずいていることを一言で送ってください。',
   );
-  assert.equal(failed.errorMessage, '応答を取得できませんでした。');
+  assert.equal(failed.errorMessage, 'AI 応答を取得できませんでした。');
   assert.equal(replied.messages.length, 2);
   assert.equal(replied.remainingLabel, '残り無料 4 回');
 });
@@ -104,7 +104,7 @@ test('settings model links account, plan, notifications, data deletion, legal, a
 
   assert.deepEqual(
     model.rows.map((row) => row.destination),
-    ['account', 'plan', 'notifications', 'data', 'terms', 'privacy', 'logout'],
+    ['account', 'plan', 'notifications', 'language', 'data', 'terms', 'privacy', 'logout'],
   );
   assert.equal(model.rows.find((row) => row.destination === 'data')?.destructive, true);
   assert.equal(model.selectedDetail, 'データ削除へ進みます。');

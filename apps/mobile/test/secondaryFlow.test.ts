@@ -37,6 +37,15 @@ test('history model supports loading, empty, reuse, delete, and chat affordances
     historyItems: [],
   });
   const ready = createHistoryScreenModel(createSecondaryFlowState(now));
+  const failed = createHistoryScreenModel({
+    ...createSecondaryFlowState(now),
+    historyItems: [
+      {
+        ...createSecondaryFlowState(now).historyItems[0]!,
+        generationStatus: 'failed',
+      },
+    ],
+  });
 
   assert.equal(loading.isLoading, true);
   assert.equal(empty.emptyMessage, 'まだ通知履歴がありません');
@@ -44,6 +53,9 @@ test('history model supports loading, empty, reuse, delete, and chat affordances
   assert.equal(ready.rows[1]?.statusLabel, 'Fallback');
   assert.equal(ready.rows[0]?.personaChip.archetypeLabel, 'Boss型');
   assert.equal(ready.rows[1]?.statusBadge.tone, 'warning');
+  assert.equal(ready.rows[0]?.actionLabels.reuse, '再利用');
+  assert.equal(failed.rows[0]?.statusLabel, 'Failed');
+  assert.equal(failed.rows[0]?.statusBadge.tone, 'danger');
 });
 
 test('chat model shows first greeting, remaining quota, and AI failure handling copy', () => {

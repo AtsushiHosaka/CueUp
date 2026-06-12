@@ -63,11 +63,17 @@ export type HistoryScreenModel = {
   rows: Array<{
     id: string;
     title: string;
+    body: string;
     detail: string;
     personaChip: PixelPersonaChipModel;
     canChat: boolean;
     statusLabel: string;
     statusBadge: PixelBadgeModel;
+    actionLabels: {
+      reuse: string;
+      chat: string;
+      delete: string;
+    };
   }>;
   errorMessage?: string;
 };
@@ -229,6 +235,7 @@ export function createHistoryScreenModel(
     rows: state.historyItems.map((item) => ({
       id: item.id,
       title: item.body,
+      body: item.body,
       detail: `${item.characterName} / ${item.sentAt ?? copy.history.unsent}`,
       personaChip: createPixelPersonaChipModel(
         {
@@ -239,8 +246,13 @@ export function createHistoryScreenModel(
         copy,
       ),
       canChat: item.characterId.trim().length > 0,
-      statusLabel: item.generationStatus === 'fallback' ? copy.history.fallback : copy.history.sent,
+      statusLabel: createHistoryStatusLabel(item.generationStatus, copy),
       statusBadge: createHistoryStatusBadge(item.generationStatus, copy),
+      actionLabels: {
+        reuse: copy.history.reuse,
+        chat: copy.history.chat,
+        delete: copy.common.delete,
+      },
     })),
   };
 }
@@ -537,4 +549,16 @@ function createHistoryStatusBadge(status: GenerationStatus, copy: UiText): Pixel
     label: copy.history.sent,
     tone: 'success',
   };
+}
+
+function createHistoryStatusLabel(status: GenerationStatus, copy: UiText): string {
+  if (status === 'fallback') {
+    return copy.history.fallback;
+  }
+
+  if (status === 'failed') {
+    return copy.history.failed;
+  }
+
+  return copy.history.sent;
 }

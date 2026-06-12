@@ -470,16 +470,22 @@ export default function App() {
 
           return (
             <View key={row.id} style={styles.reminderRow}>
-              <View style={styles.rowHeader}>
+              <View style={styles.reminderUpper}>
+                <View style={styles.reminderAvatarRail}>
+                  <PixelAvatar character={character} />
+                </View>
                 <View style={styles.reminderTitleBlock}>
                   <Text style={styles.rowTitle}>{row.title}</Text>
                   {row.note !== undefined ? <Text style={styles.rowNote}>{row.note}</Text> : null}
                 </View>
-                <PixelBadge badge={row.stateBadge} />
+                <View style={styles.reminderTimeRail}>
+                  <Text style={styles.timeLabel}>{row.scheduledLabel}</Text>
+                  <PixelBadge badge={row.stateBadge} />
+                </View>
               </View>
               <View style={styles.reminderMetaRow}>
                 <PixelPersonaChip character={character} chip={row.personaChip} />
-                <Text style={styles.meta}>{row.scheduledLabel}</Text>
+                <Text style={styles.meta}>{row.personaChip.safetyLabel}</Text>
               </View>
               <View style={styles.inlineActions}>
                 <Button
@@ -639,11 +645,8 @@ export default function App() {
                 <PixelBadge badge={row.stateBadge} />
               </View>
               <View style={styles.personaCardBody}>
-                <View style={styles.flexColumn}>
-                  <Text style={styles.rowTitle}>{row.name}</Text>
-                  <Text style={styles.meta}>{row.detail}</Text>
-                  <Text style={styles.meta}>{row.safetyLabel}</Text>
-                </View>
+                <Text style={styles.meta}>{row.detail}</Text>
+                <Text style={styles.meta}>{row.safetyLabel}</Text>
                 <View style={styles.badgeLine}>
                   <Text style={styles.badge}>{row.availabilityLabel}</Text>
                   <Text style={styles.badge}>
@@ -1184,7 +1187,16 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content}>{renderRoute()}</ScrollView>
+      <ScrollView contentContainerStyle={styles.content}>
+        {flow.authenticated ? (
+          <View style={styles.appBrand}>
+            <PixelMotif />
+            <Text style={styles.appBrandText}>CueUp</Text>
+            <PixelMotif tone="coral" />
+          </View>
+        ) : null}
+        {renderRoute()}
+      </ScrollView>
       {flow.authenticated ? (
         <View style={styles.tabBar}>
           <Tab label={copy.tabs.home} active={flow.route === 'home'} onPress={() => goTo('home')} />
@@ -1193,6 +1205,14 @@ export default function App() {
             active={flow.route === 'history'}
             onPress={() => goTo('history')}
           />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={copy.home.newReminder}
+            onPress={openCreateReminder}
+            style={({ pressed }) => [styles.createTabButton, pressed ? styles.pressed : undefined]}
+          >
+            <Text style={styles.createTabButtonText}>+</Text>
+          </Pressable>
           <Tab label={copy.tabs.chat} active={flow.route === 'chat'} onPress={() => goTo('chat')} />
           <Tab
             label={copy.tabs.store}
@@ -1256,7 +1276,7 @@ const PixelAvatar = memo(function PixelAvatar({
   );
 });
 
-function PixelMotif() {
+function PixelMotif({ tone = 'teal' }: { tone?: 'teal' | 'coral' }) {
   return (
     <View
       accessibilityElementsHidden
@@ -1268,6 +1288,7 @@ function PixelMotif() {
           key={index}
           style={[
             styles.pixelMotifCell,
+            tone === 'coral' ? styles.pixelMotifCellCoral : undefined,
             index === 1 || index === 5 ? styles.pixelMotifCellAccent : undefined,
           ]}
         />
@@ -1298,10 +1319,10 @@ const PixelPersonaChip = memo(function PixelPersonaChip({
       <PixelAvatar character={chipCharacter} size="small" />
       <View style={styles.personaChipText}>
         <Text numberOfLines={1} style={styles.personaChipLabel}>
-          {chip.archetypeLabel}
+          {chip.label}
         </Text>
         <Text numberOfLines={1} style={styles.personaChipMeta}>
-          {chip.toneLabel}
+          {chip.archetypeLabel} / {chip.toneLabel}
         </Text>
       </View>
     </View>
@@ -1397,7 +1418,13 @@ function Segment({
 
 function Tab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable accessibilityRole="tab" onPress={onPress} style={styles.tab}>
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={styles.tab}
+    >
+      <View style={[styles.tabGlyph, active ? styles.tabGlyphActive : undefined]} />
       <Text style={[styles.tabText, active ? styles.tabTextActive : undefined]}>{label}</Text>
     </Pressable>
   );
@@ -1471,18 +1498,23 @@ function InlineError({ error }: { error: { message: string; actionLabel?: string
 }
 
 const palette = {
-  background: '#F3F5F8',
-  surface: '#FFFFFF',
-  ink: '#181B24',
-  muted: '#596170',
-  border: '#C9D0DA',
-  teal: '#08746F',
-  blue: '#3657D4',
-  coral: '#D4514A',
-  amber: '#B46B00',
-  paleBlue: '#E8EEFF',
-  paleTeal: '#E4F7F3',
-  paleCoral: '#FFE7E1',
+  background: '#FFF9EE',
+  surface: '#FFFDF7',
+  ink: '#07303A',
+  muted: '#526B74',
+  border: '#D8D0BF',
+  frame: '#083A43',
+  teal: '#006E72',
+  tealDark: '#003D49',
+  aqua: '#28C9C7',
+  blue: '#315ED6',
+  coral: '#E24B83',
+  amber: '#D78A00',
+  yellow: '#FFD65A',
+  paleBlue: '#EAF0FF',
+  paleTeal: '#DFF7F1',
+  paleCoral: '#FFE5EC',
+  paperShadow: '#D6CCB9',
 };
 
 const styles = StyleSheet.create({
@@ -1491,65 +1523,120 @@ const styles = StyleSheet.create({
     backgroundColor: palette.background,
   },
   content: {
-    padding: 20,
-    paddingBottom: 96,
+    padding: 18,
+    paddingBottom: 128,
+    paddingTop: 14,
   },
   stack: {
-    gap: 14,
+    gap: 16,
   },
   onboardingHeader: {
-    gap: 12,
-    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: palette.surface,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 3,
+    gap: 16,
+    padding: 24,
+    shadowColor: palette.paperShadow,
+    shadowOffset: {
+      height: 5,
+      width: 5,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+  },
+  appBrand: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'center',
+    paddingBottom: 10,
+  },
+  appBrandText: {
+    color: palette.tealDark,
+    fontSize: 25,
+    fontWeight: '900',
   },
   brandRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
+    justifyContent: 'center',
   },
   brandText: {
-    color: palette.teal,
-    fontSize: 17,
+    color: palette.tealDark,
+    fontSize: 30,
     fontWeight: '900',
   },
   heroBand: {
     backgroundColor: palette.paleTeal,
-    borderColor: '#BFD8D3',
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 3,
     gap: 10,
     padding: 18,
+    shadowColor: palette.paperShadow,
+    shadowOffset: {
+      height: 5,
+      width: 5,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   topBar: {
     alignItems: 'center',
+    backgroundColor: palette.surface,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
+    padding: 12,
+    shadowColor: palette.paperShadow,
+    shadowOffset: {
+      height: 4,
+      width: 4,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   homeHeader: {
-    alignItems: 'flex-end',
-    borderBottomColor: palette.border,
-    borderBottomWidth: 1,
+    alignItems: 'center',
+    backgroundColor: palette.surface,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 3,
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
-    paddingBottom: 12,
+    padding: 14,
+    shadowColor: palette.paperShadow,
+    shadowOffset: {
+      height: 4,
+      width: 4,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   kicker: {
-    color: palette.teal,
+    color: palette.coral,
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '900',
   },
   heroTitle: {
     color: palette.ink,
-    fontSize: 30,
-    fontWeight: '800',
-    lineHeight: 36,
+    fontSize: 34,
+    fontWeight: '900',
+    lineHeight: 40,
+    textAlign: 'center',
   },
   title: {
     color: palette.ink,
-    fontSize: 24,
-    fontWeight: '800',
-    lineHeight: 30,
+    fontSize: 26,
+    fontWeight: '900',
+    lineHeight: 32,
   },
   body: {
     color: palette.muted,
@@ -1563,9 +1650,9 @@ const styles = StyleSheet.create({
   },
   benefitPill: {
     backgroundColor: palette.surface,
-    borderColor: '#BFD8D3',
-    borderRadius: 6,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     color: palette.teal,
     fontSize: 12,
     fontWeight: '800',
@@ -1578,9 +1665,11 @@ const styles = StyleSheet.create({
   },
   notice: {
     backgroundColor: palette.paleBlue,
-    borderColor: '#C8D6EA',
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderLeftColor: palette.blue,
+    borderLeftWidth: 6,
+    borderRadius: 4,
+    borderWidth: 2,
     gap: 8,
     padding: 14,
   },
@@ -1595,20 +1684,23 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   segmented: {
-    backgroundColor: '#ECEFE8',
-    borderRadius: 8,
+    backgroundColor: palette.surface,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     flexDirection: 'row',
-    padding: 4,
+    gap: 3,
+    padding: 3,
   },
   segment: {
     alignItems: 'center',
-    borderRadius: 6,
+    borderRadius: 2,
     flex: 1,
-    minHeight: 40,
     justifyContent: 'center',
+    minHeight: 40,
   },
   segmentActive: {
-    backgroundColor: palette.surface,
+    backgroundColor: palette.frame,
   },
   segmentText: {
     color: palette.muted,
@@ -1616,28 +1708,44 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   segmentTextActive: {
-    color: palette.ink,
+    color: palette.surface,
   },
   emptyState: {
     backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 3,
     gap: 10,
     padding: 16,
+    shadowColor: palette.paperShadow,
+    shadowOffset: {
+      height: 5,
+      width: 5,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   skeletonRow: {
     backgroundColor: '#E1E5DD',
-    borderRadius: 8,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     height: 78,
   },
   reminderRow: {
     backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 3,
     gap: 10,
     padding: 14,
+    shadowColor: palette.paperShadow,
+    shadowOffset: {
+      height: 5,
+      width: 5,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   rowHeader: {
     alignItems: 'flex-start',
@@ -1657,15 +1765,51 @@ const styles = StyleSheet.create({
     gap: 4,
     minWidth: 0,
   },
+  reminderUpper: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  reminderAvatarRail: {
+    backgroundColor: palette.paleTeal,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
+    padding: 4,
+  },
+  reminderTimeRail: {
+    alignItems: 'flex-end',
+    gap: 6,
+    minWidth: 76,
+  },
+  timeLabel: {
+    backgroundColor: palette.yellow,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
+    color: palette.frame,
+    fontSize: 12,
+    fontWeight: '900',
+    overflow: 'hidden',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
   historyRow: {
     backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderLeftColor: '#22A6B3',
-    borderLeftWidth: 4,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderLeftColor: palette.aqua,
+    borderLeftWidth: 7,
+    borderRadius: 4,
+    borderWidth: 2,
     gap: 10,
     padding: 14,
+    shadowColor: palette.paperShadow,
+    shadowOffset: {
+      height: 4,
+      width: 4,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   historyTopLine: {
     alignItems: 'center',
@@ -1706,7 +1850,9 @@ const styles = StyleSheet.create({
   },
   badge: {
     backgroundColor: palette.paleCoral,
-    borderRadius: 6,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 1,
     color: palette.coral,
     fontSize: 12,
     fontWeight: '800',
@@ -1721,10 +1867,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   pixelBadge: {
-    borderRadius: 6,
-    borderWidth: 1,
+    borderRadius: 4,
+    borderWidth: 2,
     fontSize: 12,
-    fontWeight: '800',
+    fontWeight: '900',
     overflow: 'hidden',
     paddingHorizontal: 8,
     paddingVertical: 4,
@@ -1765,17 +1911,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   statusStrip: {
-    borderColor: palette.border,
-    borderTopWidth: 1,
+    borderColor: palette.frame,
+    borderStyle: 'dashed',
+    borderTopWidth: 2,
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingTop: 12,
   },
   formPersonaBlock: {
     backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     gap: 12,
     padding: 14,
   },
@@ -1789,9 +1936,9 @@ const styles = StyleSheet.create({
   characterRow: {
     alignItems: 'center',
     backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
@@ -1806,13 +1953,20 @@ const styles = StyleSheet.create({
   },
   personaCard: {
     backgroundColor: palette.surface,
-    borderColor: palette.border,
+    borderColor: palette.frame,
     borderLeftColor: palette.teal,
-    borderLeftWidth: 4,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderLeftWidth: 7,
+    borderRadius: 4,
+    borderWidth: 2,
     gap: 10,
     padding: 14,
+    shadowColor: palette.paperShadow,
+    shadowOffset: {
+      height: 4,
+      width: 4,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   personaCardTopLine: {
     alignItems: 'center',
@@ -1840,10 +1994,10 @@ const styles = StyleSheet.create({
   personaChip: {
     alignItems: 'center',
     alignSelf: 'flex-start',
-    backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: palette.paleTeal,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     flexDirection: 'row',
     gap: 8,
     maxWidth: '100%',
@@ -1852,7 +2006,7 @@ const styles = StyleSheet.create({
     paddingRight: 10,
   },
   personaChipCompact: {
-    backgroundColor: '#F8FAFB',
+    backgroundColor: palette.surface,
   },
   personaChipText: {
     gap: 2,
@@ -1861,17 +2015,17 @@ const styles = StyleSheet.create({
   personaChipLabel: {
     color: palette.ink,
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   personaChipMeta: {
     color: palette.muted,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
   },
   pixelAvatar: {
     alignItems: 'center',
-    borderRadius: 5,
-    borderWidth: 2,
+    borderRadius: 3,
+    borderWidth: 3,
     elevation: 2,
     justifyContent: 'center',
     shadowOffset: {
@@ -1882,8 +2036,8 @@ const styles = StyleSheet.create({
     shadowRadius: 0,
   },
   pixelAvatar_small: {
-    height: 36,
-    width: 36,
+    height: 38,
+    width: 38,
   },
   pixelAvatar_medium: {
     height: 48,
@@ -1906,6 +2060,9 @@ const styles = StyleSheet.create({
     width: 5,
   },
   pixelMotifCellAccent: {
+    backgroundColor: palette.yellow,
+  },
+  pixelMotifCellCoral: {
     backgroundColor: palette.coral,
   },
   pixelRow: {
@@ -1916,16 +2073,16 @@ const styles = StyleSheet.create({
   },
   chatEmptyState: {
     backgroundColor: palette.surface,
-    borderColor: palette.border,
+    borderColor: palette.frame,
     borderLeftColor: palette.teal,
-    borderLeftWidth: 4,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderLeftWidth: 7,
+    borderRadius: 4,
+    borderWidth: 2,
     gap: 8,
     padding: 16,
   },
   chatBubble: {
-    borderRadius: 8,
+    borderRadius: 4,
     gap: 6,
     padding: 12,
   },
@@ -1942,16 +2099,16 @@ const styles = StyleSheet.create({
   chatBubbleAssistant: {
     alignSelf: 'flex-start',
     backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderWidth: 2,
     maxWidth: '88%',
   },
   settingsRow: {
     alignItems: 'center',
     backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
@@ -1967,35 +2124,35 @@ const styles = StyleSheet.create({
   safetyNotice: {
     alignItems: 'center',
     backgroundColor: palette.paleTeal,
-    borderColor: '#BFD8D3',
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     flexDirection: 'row',
     gap: 10,
     padding: 14,
   },
   preview: {
     backgroundColor: palette.paleTeal,
-    borderColor: '#BFD8D3',
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     gap: 8,
     padding: 14,
   },
   planRow: {
     alignItems: 'center',
     backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 14,
   },
   planRowCore: {
-    borderColor: '#9DCCC4',
+    borderColor: palette.frame,
     borderLeftColor: palette.teal,
-    borderLeftWidth: 4,
+    borderLeftWidth: 7,
   },
   field: {
     gap: 7,
@@ -2013,9 +2170,9 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     color: palette.ink,
     fontSize: 16,
     minHeight: 48,
@@ -2029,9 +2186,9 @@ const styles = StyleSheet.create({
   stepper: {
     alignItems: 'center',
     backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 14,
@@ -2050,12 +2207,19 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: 'center',
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 4,
+    borderWidth: 2,
     justifyContent: 'center',
     minHeight: 48,
     paddingHorizontal: 16,
     paddingVertical: 11,
+    shadowColor: palette.frame,
+    shadowOffset: {
+      height: 3,
+      width: 3,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 0,
   },
   buttonCompact: {
     minHeight: 44,
@@ -2063,20 +2227,20 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   button_primary: {
-    backgroundColor: palette.teal,
-    borderColor: palette.teal,
+    backgroundColor: palette.frame,
+    borderColor: palette.frame,
   },
   button_secondary: {
     backgroundColor: palette.paleTeal,
-    borderColor: '#BFD8D3',
+    borderColor: palette.frame,
   },
   button_ghost: {
-    backgroundColor: 'transparent',
-    borderColor: palette.border,
+    backgroundColor: palette.surface,
+    borderColor: palette.frame,
   },
   button_danger: {
     backgroundColor: palette.paleCoral,
-    borderColor: '#E0B5B1',
+    borderColor: palette.frame,
   },
   buttonText: {
     fontSize: 15,
@@ -2086,7 +2250,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   buttonText_secondary: {
-    color: palette.teal,
+    color: palette.frame,
   },
   buttonText_ghost: {
     color: palette.ink,
@@ -2099,9 +2263,9 @@ const styles = StyleSheet.create({
   },
   error: {
     backgroundColor: palette.paleCoral,
-    borderColor: '#E0B5B1',
-    borderRadius: 8,
-    borderWidth: 1,
+    borderColor: palette.frame,
+    borderRadius: 4,
+    borderWidth: 2,
     gap: 4,
     padding: 12,
   },
@@ -2116,29 +2280,68 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   tabBar: {
-    backgroundColor: palette.surface,
-    borderColor: palette.border,
-    borderTopWidth: 1,
+    alignItems: 'center',
+    backgroundColor: palette.frame,
+    borderColor: palette.aqua,
+    borderTopWidth: 3,
     bottom: 0,
     flexDirection: 'row',
     left: 0,
-    minHeight: 64,
-    paddingBottom: 8,
-    paddingTop: 8,
+    minHeight: 80,
+    paddingBottom: 14,
+    paddingTop: 10,
     position: 'absolute',
     right: 0,
   },
   tab: {
     alignItems: 'center',
     flex: 1,
+    gap: 5,
     justifyContent: 'center',
   },
+  tabGlyph: {
+    backgroundColor: '#789199',
+    borderColor: palette.surface,
+    borderRadius: 2,
+    borderWidth: 1,
+    height: 9,
+    width: 9,
+  },
+  tabGlyphActive: {
+    backgroundColor: palette.coral,
+    borderColor: palette.yellow,
+    height: 11,
+    width: 11,
+  },
   tabText: {
-    color: palette.muted,
+    color: '#BFD3D6',
     fontSize: 12,
     fontWeight: '800',
   },
   tabTextActive: {
-    color: palette.teal,
+    color: palette.surface,
+  },
+  createTabButton: {
+    alignItems: 'center',
+    backgroundColor: palette.coral,
+    borderColor: palette.frame,
+    borderRadius: 5,
+    borderWidth: 3,
+    height: 58,
+    justifyContent: 'center',
+    shadowColor: palette.frame,
+    shadowOffset: {
+      height: 5,
+      width: 5,
+    },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    width: 58,
+  },
+  createTabButtonText: {
+    color: palette.surface,
+    fontSize: 36,
+    fontWeight: '900',
+    lineHeight: 40,
   },
 });

@@ -898,8 +898,8 @@ export default function App() {
           <Text style={styles.kicker}>{copy.pro.kicker}</Text>
           <Text style={styles.heroTitle}>{pro.title}</Text>
           <View style={styles.benefitPillRow}>
-            {pro.benefits.map((benefit) => (
-              <Text key={benefit} style={styles.benefitPill}>
+            {pro.benefits.map((benefit, index) => (
+              <Text key={`${benefit}-${index}`} style={styles.benefitPill}>
                 {benefit}
               </Text>
             ))}
@@ -910,9 +910,9 @@ export default function App() {
           <InlineError error={{ message: pro.errorMessage }} />
         ) : null}
         <View style={styles.benefitList}>
-          {pro.benefitRows.map((row) => (
+          {pro.benefitRows.map((row, index) => (
             <View
-              key={row.label}
+              key={`${row.iconKey}-${index}`}
               style={[styles.planRow, row.priority === 'core' ? styles.planRowCore : undefined]}
             >
               <View style={styles.flexColumn}>
@@ -1214,32 +1214,21 @@ const PixelAvatar = memo(function PixelAvatar({
   );
 });
 
-function PixelBadge({ badge }: { badge: PixelBadgeModel }) {
+const PixelBadge = memo(function PixelBadge({ badge }: { badge: PixelBadgeModel }) {
   return <Text style={[styles.pixelBadge, getPixelBadgeToneStyle(badge.tone)]}>{badge.label}</Text>;
-}
+});
 
 function getPixelBadgeToneStyle(tone: PixelBadgeModel['tone']) {
-  if (tone === 'success') {
-    return styles.pixelBadgeSuccess;
-  }
+  const toneStyles: Record<PixelBadgeModel['tone'], object> = {
+    neutral: styles.pixelBadgeNeutral,
+    selected: styles.pixelBadgeSelected,
+    locked: styles.pixelBadgeLocked,
+    success: styles.pixelBadgeSuccess,
+    warning: styles.pixelBadgeWarning,
+    danger: styles.pixelBadgeDanger,
+  };
 
-  if (tone === 'warning') {
-    return styles.pixelBadgeWarning;
-  }
-
-  if (tone === 'danger') {
-    return styles.pixelBadgeDanger;
-  }
-
-  if (tone === 'selected') {
-    return styles.pixelBadgeSelected;
-  }
-
-  if (tone === 'locked') {
-    return styles.pixelBadgeLocked;
-  }
-
-  return styles.pixelBadgeNeutral;
+  return toneStyles[tone] ?? styles.pixelBadgeNeutral;
 }
 
 function findCharacterById(characters: Character[], characterId: string | undefined) {

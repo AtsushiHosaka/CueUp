@@ -29,7 +29,11 @@ import {
   type ReminderFilter,
 } from './domain/mainFlow';
 import { sanitizeCustomCharacterText } from './domain/customCharacters';
-import { getPixelAvatarTheme, type PixelCharacter } from './domain/pixelCharacters';
+import {
+  getPixelAvatarTheme,
+  type PixelBadgeModel,
+  type PixelCharacter,
+} from './domain/pixelCharacters';
 import { createReminderDraft, sanitizeReminderTitle } from './domain/reminders';
 import {
   appendChatExchange,
@@ -893,18 +897,44 @@ export default function App() {
         <View style={styles.heroBand}>
           <Text style={styles.kicker}>{copy.pro.kicker}</Text>
           <Text style={styles.heroTitle}>{pro.title}</Text>
-          <Text style={styles.body}>{pro.benefits.join(' / ')}</Text>
+          <View style={styles.benefitPillRow}>
+            {pro.benefits.map((benefit) => (
+              <Text key={benefit} style={styles.benefitPill}>
+                {benefit}
+              </Text>
+            ))}
+          </View>
         </View>
         {flow.lastError !== undefined ? <InlineError error={flow.lastError} /> : null}
         {pro.errorMessage !== undefined ? (
           <InlineError error={{ message: pro.errorMessage }} />
         ) : null}
-        {pro.comparisonRows.map((row) => (
-          <View key={row.label} style={styles.planRow}>
-            <Text style={styles.value}>{row.label}</Text>
-            <Text style={styles.meta}>{copy.pro.comparison(row.free, row.pro)}</Text>
+        <View style={styles.benefitList}>
+          {pro.benefitRows.map((row) => (
+            <View
+              key={row.label}
+              style={[styles.planRow, row.priority === 'core' ? styles.planRowCore : undefined]}
+            >
+              <View style={styles.flexColumn}>
+                <Text style={styles.value}>{row.label}</Text>
+                <Text style={styles.meta}>{copy.pro.comparison(row.free, row.pro)}</Text>
+              </View>
+              <PixelBadge
+                badge={{
+                  label: row.priority === 'core' ? copy.pro.included : copy.packs.addOnLabel,
+                  tone: row.priority === 'core' ? 'success' : 'neutral',
+                }}
+              />
+            </View>
+          ))}
+        </View>
+        <View style={styles.notice}>
+          <View style={styles.badgeLine}>
+            <PixelBadge badge={{ label: copy.packs.addOnLabel, tone: 'neutral' }} />
+            <Text style={styles.noticeTitle}>{copy.packs.title}</Text>
           </View>
-        ))}
+          <Text style={styles.noticeBody}>{pro.addOnNote}</Text>
+        </View>
         <View style={styles.inlineActions}>
           <Button
             label={pro.purchaseLabel}
@@ -981,7 +1011,10 @@ export default function App() {
                 <View style={styles.flexColumn}>
                   <Text style={styles.rowTitle}>{row.name}</Text>
                   <Text style={styles.meta}>{row.description}</Text>
-                  <Text style={styles.badge}>{row.priceLabel}</Text>
+                  <View style={styles.badgeLine}>
+                    <PixelBadge badge={row.stateBadge} />
+                    <Text style={styles.badge}>{row.priceLabel}</Text>
+                  </View>
                 </View>
               </View>
               <Button
@@ -1036,9 +1069,12 @@ export default function App() {
               </Text>
               <Text style={styles.meta}>{row.detail}</Text>
             </View>
-            <Text style={styles.meta}>
-              {row.destination === 'language' ? copy.settings.languageToggle : copy.settings.open}
-            </Text>
+            <View style={styles.settingsAction}>
+              {row.stateBadge !== undefined ? <PixelBadge badge={row.stateBadge} /> : null}
+              <Text style={styles.meta}>
+                {row.destination === 'language' ? copy.settings.languageToggle : copy.settings.open}
+              </Text>
+            </View>
           </Pressable>
         ))}
       </View>
@@ -1177,6 +1213,34 @@ const PixelAvatar = memo(function PixelAvatar({
     </View>
   );
 });
+
+function PixelBadge({ badge }: { badge: PixelBadgeModel }) {
+  return <Text style={[styles.pixelBadge, getPixelBadgeToneStyle(badge.tone)]}>{badge.label}</Text>;
+}
+
+function getPixelBadgeToneStyle(tone: PixelBadgeModel['tone']) {
+  if (tone === 'success') {
+    return styles.pixelBadgeSuccess;
+  }
+
+  if (tone === 'warning') {
+    return styles.pixelBadgeWarning;
+  }
+
+  if (tone === 'danger') {
+    return styles.pixelBadgeDanger;
+  }
+
+  if (tone === 'selected') {
+    return styles.pixelBadgeSelected;
+  }
+
+  if (tone === 'locked') {
+    return styles.pixelBadgeLocked;
+  }
+
+  return styles.pixelBadgeNeutral;
+}
 
 function findCharacterById(characters: Character[], characterId: string | undefined) {
   if (characterId === undefined) {
@@ -1386,6 +1450,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 23,
   },
+  benefitPillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  benefitPill: {
+    backgroundColor: palette.surface,
+    borderColor: '#BFD8D3',
+    borderRadius: 6,
+    borderWidth: 1,
+    color: palette.teal,
+    fontSize: 12,
+    fontWeight: '800',
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  benefitList: {
+    gap: 10,
+  },
   notice: {
     backgroundColor: palette.paleBlue,
     borderColor: '#C8D6EA',
@@ -1483,6 +1567,51 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: 8,
     paddingVertical: 4,
+  },
+  badgeLine: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  pixelBadge: {
+    borderRadius: 6,
+    borderWidth: 1,
+    fontSize: 12,
+    fontWeight: '800',
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  pixelBadgeNeutral: {
+    backgroundColor: '#EEF1F5',
+    borderColor: palette.border,
+    color: palette.muted,
+  },
+  pixelBadgeSelected: {
+    backgroundColor: palette.paleTeal,
+    borderColor: '#9DCCC4',
+    color: palette.teal,
+  },
+  pixelBadgeLocked: {
+    backgroundColor: palette.paleBlue,
+    borderColor: '#C8D6EA',
+    color: palette.blue,
+  },
+  pixelBadgeSuccess: {
+    backgroundColor: '#E4F7E9',
+    borderColor: '#AED8BA',
+    color: '#257044',
+  },
+  pixelBadgeWarning: {
+    backgroundColor: '#FFF3D8',
+    borderColor: '#E6C06B',
+    color: palette.amber,
+  },
+  pixelBadgeDanger: {
+    backgroundColor: palette.paleCoral,
+    borderColor: '#E7B7AE',
+    color: palette.coral,
   },
   inlineActions: {
     flexDirection: 'row',
@@ -1602,6 +1731,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 14,
   },
+  settingsAction: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
   dangerText: {
     color: palette.coral,
   },
@@ -1622,6 +1755,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     padding: 14,
+  },
+  planRowCore: {
+    borderColor: '#9DCCC4',
+    borderLeftColor: palette.teal,
+    borderLeftWidth: 4,
   },
   field: {
     gap: 7,

@@ -356,6 +356,21 @@ export function createProScreenModel(
         free: copy.pro.historyDays(FREE_PLAN_LIMITS.notificationHistoryDays),
         pro: copy.pro.unlimited,
       },
+      {
+        label: copy.pro.foldersTags,
+        free: copy.pro.basic,
+        pro: copy.pro.included,
+      },
+      {
+        label: copy.pro.smartLists,
+        free: copy.pro.unavailable,
+        pro: copy.pro.included,
+      },
+      {
+        label: copy.pro.sync,
+        free: '1',
+        pro: copy.pro.multiDevice,
+      },
     ],
     purchaseLabel: state.commerceStatus === 'loading' ? copy.pro.purchasing : copy.pro.purchase,
     restoreLabel: copy.pro.restore,

@@ -33,6 +33,7 @@ import {
   getPixelAvatarTheme,
   type PixelBadgeModel,
   type PixelCharacter,
+  type PixelPersonaChipModel,
 } from './domain/pixelCharacters';
 import { createReminderDraft, sanitizeReminderTitle } from './domain/reminders';
 import {
@@ -784,30 +785,30 @@ export default function App() {
             return null;
           }
 
-          const character =
-            findCharacterById(flow.characters, item.characterId) ??
-            createPixelCharacterFallback(item.characterId, item.characterName, 'built_in');
-
           return (
-            <View key={row.id} style={styles.reminderRow}>
-              <View style={styles.rowHeader}>
-                <View style={styles.reminderIdentity}>
-                  <PixelAvatar character={character} size="small" />
-                  <Text style={styles.rowTitle}>{row.title}</Text>
-                </View>
-                <Text style={styles.badge}>{row.statusLabel}</Text>
+            <View key={row.id} style={styles.historyRow}>
+              <View style={styles.historyTopLine}>
+                <PixelPersonaChip chip={row.personaChip} compact />
+                <PixelBadge badge={row.statusBadge} />
               </View>
+              <Text style={styles.historyBody}>{row.body}</Text>
               <Text style={styles.meta}>{row.detail}</Text>
               <View style={styles.inlineActions}>
-                <Button label={copy.history.reuse} compact onPress={() => reuseHistoryItem(item)} />
                 <Button
-                  label={copy.history.chat}
+                  label={row.actionLabels.reuse}
                   compact
-                  variant="secondary"
-                  onPress={() => openChatForHistory(item)}
+                  onPress={() => reuseHistoryItem(item)}
                 />
+                {row.canChat ? (
+                  <Button
+                    label={row.actionLabels.chat}
+                    compact
+                    variant="secondary"
+                    onPress={() => openChatForHistory(item)}
+                  />
+                ) : null}
                 <Button
-                  label={copy.common.delete}
+                  label={row.actionLabels.delete}
                   compact
                   variant="danger"
                   onPress={() => deleteHistoryItem(row.id)}
@@ -824,18 +825,19 @@ export default function App() {
     return (
       <View style={styles.stack}>
         <View style={styles.topBar}>
-          <View style={styles.chatTitleRow}>
-            <PixelAvatar character={selectedCharacter} size="large" />
-            <View>
+          <View style={styles.chatHeader}>
+            <View style={styles.flexColumn}>
               <Text style={styles.kicker}>{copy.chat.kicker}</Text>
               <Text style={styles.title}>{chat.characterName}</Text>
             </View>
+            <PixelPersonaChip chip={chat.personaChip} compact />
           </View>
-          <Text style={styles.badge}>{chat.remainingLabel}</Text>
+          <PixelBadge badge={chat.remainingBadge} />
         </View>
         {chat.emptyGreeting !== undefined ? (
-          <View style={styles.emptyState}>
+          <View style={styles.chatEmptyState}>
             <Text style={styles.rowTitle}>{chat.emptyGreeting}</Text>
+            <Text style={styles.meta}>{chat.personaChip.safetyLabel}</Text>
           </View>
         ) : null}
         {chat.errorMessage !== undefined ? (
@@ -849,9 +851,7 @@ export default function App() {
               message.role === 'user' ? styles.chatBubbleUser : styles.chatBubbleAssistant,
             ]}
           >
-            <Text style={styles.meta}>
-              {message.role === 'user' ? copy.chat.you : chat.characterName}
-            </Text>
+            <Text style={styles.chatRole}>{message.roleLabel}</Text>
             <Text style={styles.value}>{message.body}</Text>
           </View>
         ))}
@@ -1214,6 +1214,34 @@ const PixelAvatar = memo(function PixelAvatar({
   );
 });
 
+const PixelPersonaChip = memo(function PixelPersonaChip({
+  chip,
+  compact = false,
+}: {
+  chip: PixelPersonaChipModel;
+  compact?: boolean;
+}) {
+  const chipCharacter = createPixelCharacterFallback(
+    chip.characterId,
+    chip.label,
+    chip.avatarVariant === 'custom' ? 'custom' : 'built_in',
+  );
+
+  return (
+    <View style={[styles.personaChip, compact ? styles.personaChipCompact : undefined]}>
+      <PixelAvatar character={chipCharacter} size="small" />
+      <View style={styles.personaChipText}>
+        <Text numberOfLines={1} style={styles.personaChipLabel}>
+          {chip.archetypeLabel}
+        </Text>
+        <Text numberOfLines={1} style={styles.personaChipMeta}>
+          {chip.toneLabel}
+        </Text>
+      </View>
+    </View>
+  );
+});
+
 const PixelBadge = memo(function PixelBadge({ badge }: { badge: PixelBadgeModel }) {
   return <Text style={[styles.pixelBadge, getPixelBadgeToneStyle(badge.tone)]}>{badge.label}</Text>;
 });
@@ -1535,6 +1563,29 @@ const styles = StyleSheet.create({
     gap: 10,
     minWidth: 0,
   },
+  historyRow: {
+    backgroundColor: palette.surface,
+    borderColor: palette.border,
+    borderLeftColor: '#22A6B3',
+    borderLeftWidth: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+    padding: 14,
+  },
+  historyTopLine: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  historyBody: {
+    color: palette.ink,
+    fontSize: 17,
+    fontWeight: '800',
+    lineHeight: 24,
+  },
   rowTitle: {
     color: palette.ink,
     flex: 1,
@@ -1654,12 +1705,44 @@ const styles = StyleSheet.create({
     gap: 6,
     minWidth: 0,
   },
-  chatTitleRow: {
+  chatHeader: {
     alignItems: 'center',
     flex: 1,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     minWidth: 0,
+  },
+  personaChip: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: palette.surface,
+    borderColor: palette.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    maxWidth: '100%',
+    minHeight: 44,
+    padding: 6,
+    paddingRight: 10,
+  },
+  personaChipCompact: {
+    backgroundColor: '#F8FAFB',
+  },
+  personaChipText: {
+    gap: 2,
+    minWidth: 0,
+  },
+  personaChipLabel: {
+    color: palette.ink,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  personaChipMeta: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: '700',
   },
   pixelAvatar: {
     alignItems: 'center',
@@ -1692,10 +1775,25 @@ const styles = StyleSheet.create({
   pixelCell: {
     borderRadius: 0,
   },
+  chatEmptyState: {
+    backgroundColor: palette.surface,
+    borderColor: palette.border,
+    borderLeftColor: palette.teal,
+    borderLeftWidth: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+    padding: 16,
+  },
   chatBubble: {
     borderRadius: 8,
     gap: 6,
     padding: 12,
+  },
+  chatRole: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: '800',
   },
   chatBubbleUser: {
     alignSelf: 'flex-end',

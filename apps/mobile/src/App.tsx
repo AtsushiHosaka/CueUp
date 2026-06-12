@@ -1,4 +1,5 @@
 import { FREE_PLAN_LIMITS, type Character, type Reminder } from '@cueup/shared';
+import { useFonts } from 'expo-font';
 import { memo, useMemo, useState } from 'react';
 import {
   Pressable,
@@ -52,8 +53,14 @@ import {
 import { getUiText, supportedLocales, type SupportedLocale } from './i18n/uiText';
 
 const fixedNow = new Date('2026-06-01T00:00:00.000Z');
+const importantFontFamily = 'DenkiChip';
 
 export default function App() {
+  const [fontsLoaded, fontLoadError] = useFonts({
+    [importantFontFamily]: require('../assets/fonts/x8y12pxDenkiChip.ttf'),
+  });
+  const importantFontStyle =
+    fontsLoaded && fontLoadError === null ? styles.importantFont : undefined;
   const now = useMemo(() => fixedNow, []);
   const [locale, setLocale] = useState<SupportedLocale>('ja');
   const copy = useMemo(() => getUiText(locale), [locale]);
@@ -361,14 +368,16 @@ export default function App() {
         <View style={styles.onboardingHeader}>
           <View style={styles.brandRow}>
             <PixelMotif />
-            <Text style={styles.brandText}>CueUp</Text>
+            <Text style={[styles.brandText, importantFontStyle]}>CueUp</Text>
           </View>
-          <Text style={styles.heroTitle}>{onboarding.title}</Text>
+          <Text style={[styles.heroTitle, importantFontStyle]}>{onboarding.title}</Text>
           <Text style={styles.body}>{copy.onboarding.body}</Text>
         </View>
         {onboarding.permissionNotice !== undefined ? (
           <View style={styles.notice}>
-            <Text style={styles.noticeTitle}>{onboarding.permissionNotice.title}</Text>
+            <Text style={[styles.noticeTitle, importantFontStyle]}>
+              {onboarding.permissionNotice.title}
+            </Text>
             <Text style={styles.noticeBody}>{onboarding.permissionNotice.body}</Text>
             <Button label={onboarding.permissionNotice.actionLabel} onPress={() => undefined} />
           </View>
@@ -413,14 +422,16 @@ export default function App() {
       <View style={styles.stack}>
         <View style={styles.homeHeader}>
           <View>
-            <Text style={styles.kicker}>{copy.home.kicker}</Text>
-            <Text style={styles.title}>{copy.home.title}</Text>
+            <Text style={[styles.kicker, importantFontStyle]}>{copy.home.kicker}</Text>
+            <Text style={[styles.title, importantFontStyle]}>{copy.home.title}</Text>
           </View>
           <Button label={copy.home.newReminder} compact onPress={openCreateReminder} />
         </View>
         {home.notificationBanner !== undefined ? (
           <View style={styles.notice}>
-            <Text style={styles.noticeTitle}>{home.notificationBanner.title}</Text>
+            <Text style={[styles.noticeTitle, importantFontStyle]}>
+              {home.notificationBanner.title}
+            </Text>
             <Button label={home.notificationBanner.actionLabel} compact onPress={() => undefined} />
           </View>
         ) : null}
@@ -479,7 +490,7 @@ export default function App() {
                   {row.note !== undefined ? <Text style={styles.rowNote}>{row.note}</Text> : null}
                 </View>
                 <View style={styles.reminderTimeRail}>
-                  <Text style={styles.timeLabel}>{row.scheduledLabel}</Text>
+                  <Text style={[styles.timeLabel, importantFontStyle]}>{row.scheduledLabel}</Text>
                   <PixelBadge badge={row.stateBadge} />
                 </View>
               </View>
@@ -550,12 +561,12 @@ export default function App() {
       <View style={styles.stack}>
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.kicker}>
+            <Text style={[styles.kicker, importantFontStyle]}>
               {reminderForm.mode === 'create'
                 ? copy.reminderForm.createKicker
                 : copy.reminderForm.editKicker}
             </Text>
-            <Text style={styles.title}>{copy.reminderForm.title}</Text>
+            <Text style={[styles.title, importantFontStyle]}>{copy.reminderForm.title}</Text>
           </View>
           <Button label={copy.common.back} compact variant="ghost" onPress={() => goTo('home')} />
         </View>
@@ -629,8 +640,8 @@ export default function App() {
       <View style={styles.stack}>
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.kicker}>{copy.character.selectKicker}</Text>
-            <Text style={styles.title}>{copy.character.selectTitle}</Text>
+            <Text style={[styles.kicker, importantFontStyle]}>{copy.character.selectKicker}</Text>
+            <Text style={[styles.title, importantFontStyle]}>{copy.character.selectTitle}</Text>
           </View>
           <Button label={copy.common.create} compact onPress={() => goTo('characterCreate')} />
         </View>
@@ -704,8 +715,8 @@ export default function App() {
       <View style={styles.stack}>
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.kicker}>{copy.character.createKicker}</Text>
-            <Text style={styles.title}>{copy.character.createTitle}</Text>
+            <Text style={[styles.kicker, importantFontStyle]}>{copy.character.createKicker}</Text>
+            <Text style={[styles.title, importantFontStyle]}>{copy.character.createTitle}</Text>
           </View>
           <Button
             label={copy.common.back}
@@ -784,8 +795,8 @@ export default function App() {
       <View style={styles.stack}>
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.kicker}>{copy.history.kicker}</Text>
-            <Text style={styles.title}>{copy.history.title}</Text>
+            <Text style={[styles.kicker, importantFontStyle]}>{copy.history.kicker}</Text>
+            <Text style={[styles.title, importantFontStyle]}>{copy.history.title}</Text>
           </View>
           <Button
             label={copy.history.reload}
@@ -816,7 +827,7 @@ export default function App() {
         ) : null}
         {history.emptyMessage !== undefined ? (
           <View style={styles.emptyState}>
-            <Text style={styles.title}>{history.emptyMessage}</Text>
+            <Text style={[styles.title, importantFontStyle]}>{history.emptyMessage}</Text>
             <Text style={styles.body}>{copy.history.emptyBody}</Text>
           </View>
         ) : null}
@@ -872,8 +883,8 @@ export default function App() {
         <View style={styles.topBar}>
           <View style={styles.chatHeader}>
             <View style={styles.flexColumn}>
-              <Text style={styles.kicker}>{copy.chat.kicker}</Text>
-              <Text style={styles.title}>{chat.characterName}</Text>
+              <Text style={[styles.kicker, importantFontStyle]}>{copy.chat.kicker}</Text>
+              <Text style={[styles.title, importantFontStyle]}>{chat.characterName}</Text>
             </View>
             <PixelPersonaChip chip={chat.personaChip} compact />
           </View>
@@ -940,8 +951,8 @@ export default function App() {
     return (
       <View style={styles.stack}>
         <View style={styles.heroBand}>
-          <Text style={styles.kicker}>{copy.pro.kicker}</Text>
-          <Text style={styles.heroTitle}>{pro.title}</Text>
+          <Text style={[styles.kicker, importantFontStyle]}>{copy.pro.kicker}</Text>
+          <Text style={[styles.heroTitle, importantFontStyle]}>{pro.title}</Text>
           <View style={styles.benefitPillRow}>
             {pro.benefits.map((benefit, index) => (
               <Text key={`${benefit}-${index}`} style={styles.benefitPill}>
@@ -976,7 +987,7 @@ export default function App() {
         <View style={styles.notice}>
           <View style={styles.badgeLine}>
             <PixelBadge badge={{ label: copy.packs.addOnLabel, tone: 'neutral' }} />
-            <Text style={styles.noticeTitle}>{copy.packs.title}</Text>
+            <Text style={[styles.noticeTitle, importantFontStyle]}>{copy.packs.title}</Text>
           </View>
           <Text style={styles.noticeBody}>{pro.addOnNote}</Text>
         </View>
@@ -1024,8 +1035,8 @@ export default function App() {
       <View style={styles.stack}>
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.kicker}>{copy.packs.kicker}</Text>
-            <Text style={styles.title}>{copy.packs.title}</Text>
+            <Text style={[styles.kicker, importantFontStyle]}>{copy.packs.kicker}</Text>
+            <Text style={[styles.title, importantFontStyle]}>{copy.packs.title}</Text>
           </View>
           <Button
             label={copy.packs.restore}
@@ -1093,12 +1104,12 @@ export default function App() {
     return (
       <View style={styles.stack}>
         <View>
-          <Text style={styles.kicker}>{copy.settings.kicker}</Text>
-          <Text style={styles.title}>{copy.settings.title}</Text>
+          <Text style={[styles.kicker, importantFontStyle]}>{copy.settings.kicker}</Text>
+          <Text style={[styles.title, importantFontStyle]}>{copy.settings.title}</Text>
         </View>
         {settings.selectedDetail !== undefined ? (
           <View style={styles.notice}>
-            <Text style={styles.noticeTitle}>{settings.selectedDetail}</Text>
+            <Text style={[styles.noticeTitle, importantFontStyle]}>{settings.selectedDetail}</Text>
           </View>
         ) : null}
         {settings.rows.map((row) => (
@@ -1191,7 +1202,7 @@ export default function App() {
         {flow.authenticated ? (
           <View style={styles.appBrand}>
             <PixelMotif />
-            <Text style={styles.appBrandText}>CueUp</Text>
+            <Text style={[styles.appBrandText, importantFontStyle]}>CueUp</Text>
             <PixelMotif tone="coral" />
           </View>
         ) : null}
@@ -1211,7 +1222,7 @@ export default function App() {
             onPress={openCreateReminder}
             style={({ pressed }) => [styles.createTabButton, pressed ? styles.pressed : undefined]}
           >
-            <Text style={styles.createTabButtonText}>+</Text>
+            <Text style={[styles.createTabButtonText, importantFontStyle]}>+</Text>
           </Pressable>
           <Tab label={copy.tabs.chat} active={flow.route === 'chat'} onPress={() => goTo('chat')} />
           <Tab
@@ -1529,6 +1540,11 @@ const styles = StyleSheet.create({
   },
   stack: {
     gap: 16,
+  },
+  importantFont: {
+    fontFamily: importantFontFamily,
+    fontWeight: '400',
+    letterSpacing: 0,
   },
   onboardingHeader: {
     alignItems: 'center',

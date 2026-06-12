@@ -79,6 +79,8 @@ export type UiText = {
     emptyBody: string;
     emptyAction: string;
     sampleSync: string;
+    active: string;
+    completed: string;
     complete: string;
     snoozeTenMinutes: string;
     freeCueLimit: (limit: number) => string;
@@ -345,6 +347,8 @@ export const uiText = {
       emptyBody: '時間、キャラクター、ひとことメモを決めるだけで開始できます。',
       emptyAction: 'Cue を作成',
       sampleSync: 'サンプル同期',
+      active: '進行中',
+      completed: '完了',
       complete: '完了',
       snoozeTenMinutes: '10分後',
       freeCueLimit: (limit: number) => `Free ${limit} Cue`,
@@ -614,6 +618,8 @@ export const uiText = {
       emptyBody: 'Pick a time, a character, and one short note to get started.',
       emptyAction: 'Create Cue',
       sampleSync: 'Load sample',
+      active: 'Active',
+      completed: 'Done',
       complete: 'Done',
       snoozeTenMinutes: '10 min',
       freeCueLimit: (limit: number) => (limit === 1 ? 'Free 1 Cue' : `Free ${limit} Cues`),

@@ -88,7 +88,7 @@ export type ReminderRow = {
   actionLabels: {
     complete: string;
     snooze: string;
-    edit: string;
+    edit?: string;
     delete: string;
   };
   badge?: string;
@@ -597,7 +597,7 @@ function createReminderRow(reminder: Reminder, characters: Character[], copy: Ui
     actionLabels: {
       complete: copy.home.complete,
       snooze: copy.home.snoozeTenMinutes,
-      edit: copy.common.edit,
+      ...(reminder.status !== 'completed' ? { edit: copy.common.edit } : {}),
       delete: copy.common.delete,
     },
     ...(reminder.status === 'snoozed' ? { badge: copy.home.filters.snoozed } : {}),
@@ -614,7 +614,7 @@ function createReminderStateBadge(status: ReminderStatus, copy: UiText): PixelBa
 
   if (status === 'completed') {
     return {
-      label: copy.history.sent,
+      label: copy.home.completed,
       tone: 'success',
     };
   }
@@ -627,7 +627,7 @@ function createReminderStateBadge(status: ReminderStatus, copy: UiText): PixelBa
   }
 
   return {
-    label: copy.persona.availability.available,
+    label: copy.home.active,
     tone: 'neutral',
   };
 }

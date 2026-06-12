@@ -34,6 +34,7 @@ Issue: #46
 - Fallback used `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl` plus Expo Go.
 - Expo Go smoke ran at `exp://127.0.0.1:8081`.
 - Expo iOS export succeeded at `/private/tmp/cueup-expo-export-46-final`.
+- After merging `origin/main`, Expo iOS export also succeeded at `/private/tmp/cueup-expo-export-46-final-merged`.
 
 ## Command Results
 
@@ -43,6 +44,7 @@ Issue: #46
 - `npm test`: passed.
 - `npm run build`: passed.
 - `EXPO_NO_TELEMETRY=1 npx expo export --platform ios --output-dir /private/tmp/cueup-expo-export-46-final --clear`: passed.
+- `EXPO_NO_TELEMETRY=1 npx expo export --platform ios --output-dir /private/tmp/cueup-expo-export-46-final-merged --clear`: passed after merging `origin/main`.
 
 ## Deferred Decisions
 

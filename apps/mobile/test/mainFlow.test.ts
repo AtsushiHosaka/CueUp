@@ -25,7 +25,7 @@ test('onboarding model exposes notification denial recovery', () => {
   assert.equal(denied.permissionNotice?.actionLabel, 'OS 設定を開く');
 });
 
-test('home model shows the first Cue empty state and notification banner', () => {
+test('home model shows the first reminder empty state and notification banner', () => {
   const state = {
     ...createInitialMainFlowState(now),
     route: 'home' as const,
@@ -35,7 +35,7 @@ test('home model shows the first Cue empty state and notification banner', () =>
   const model = createHomeScreenModel(state, now);
 
   assert.equal(model.notificationBanner?.actionLabel, '設定を開く');
-  assert.equal(model.emptyState?.title, '最初の Cue を作成しましょう');
+  assert.equal(model.emptyState?.title, '最初のリマインダーを作成しましょう');
   assert.deepEqual(model.rows, []);
 });
 
@@ -55,7 +55,7 @@ test('home model surfaces loading skeletons and filtered reminder rows', () => {
       {
         ...all.reminders[0]!,
         id: 'reminder-completed',
-        title: '完了したCue',
+        title: '完了したリマインダー',
         status: 'completed' as const,
       },
     ],

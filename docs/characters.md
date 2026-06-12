@@ -2,6 +2,25 @@
 
 Character catalog logic lives in `services/api/src/characters`.
 
+## Product Intent
+
+Character personas exist to make a reminder feel like it came from a motivating presence:
+someone the user would listen to, respect, feel accountable to, or feel personally encouraged by.
+The original product idea can be summarized as "a cue from a famous-person-like or familiar-person-like
+presence," but the implementation must translate that feeling into safe fictional archetypes.
+
+Pixel art is an abstraction layer for mood, role, and distance. It is not a loophole for using a
+real person's name, portrait, catchphrases, public identity, or "sound-alike" promise. Built-in and
+pack characters should therefore read as fictional motivational roles, for example a visionary
+founder type, trusted senior type, deadline editor type, study captain type, or calm mentor type.
+Each seed or mock character should answer: "Why would receiving a notification from this kind of
+person make the user move now?"
+
+Custom characters may support a familiar-person-like feeling through relationship, tone, and role,
+but they must not recreate a real person's identity or likeness. Treat consent, privacy, and
+abstraction as product requirements: prefer "strict older-sibling energy" or "supportive teammate"
+over names, photos, portraits, or direct imitation.
+
 ## Catalog
 
 The initial seed includes built-in characters and one pack character:
@@ -22,6 +41,7 @@ likenesses of real people.
 Design requirements:
 
 - use a small fixed pixel grid with crisp edges and no blur
+- make the avatar and copy communicate a motivating relationship or aspirational role
 - keep silhouettes symbolic and archetypal, even when the persona is inspired by a familiar role
 - avoid celebrity names, real-person likeness, trademarked outfits, and direct portrait references
 - give each persona a distinct palette, outline, and accent color

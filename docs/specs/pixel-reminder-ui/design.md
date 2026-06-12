@@ -6,6 +6,8 @@ The selected direction is a practical mobile reminder app with restrained pixel-
 
 The design uses ordinary system fonts for now. Pixel identity comes from shape language, small icons, badges, borders, and simple decorative motifs. A future issue may introduce pixel fonts after readability and licensing are decided.
 
+The persona direction is motivational abstraction. The user should feel a cue came from a respected, familiar, or aspirational presence they would actually respond to, while the app remains clear that the persona is fictional. Pixel art creates distance and charm, but it does not permit real-person names, public-figure likeness, "本人風" claims, portraits, or direct imitation.
+
 ## Requirements Traceability
 
 | Requirement | Design Coverage                                                         |
@@ -40,7 +42,29 @@ This direction directly addresses the critique of the previous designs:
 - It keeps login simple and avoids adding a character where it does not help.
 - It returns the product hierarchy to reminders and organization.
 - It preserves the delight of AI persona notifications through small pixel flavor.
-- It keeps famous-person-like appeal safe by using fictional archetypes instead of real celebrity references.
+- It keeps famous-person-like or familiar-person-like appeal safe by translating the motivating role into fictional archetypes instead of real celebrity, public-figure, or acquaintance references.
+
+### Persona Motivation Model
+
+Every built-in, pack, demo, or seed persona should answer three questions:
+
+- Why would a user move when this kind of presence sends a notification?
+- What relationship or aspirational role is being abstracted?
+- How does the name, chip label, description, and notification tone express that role without using a real identity?
+
+Good persona directions:
+
+- Visionary founder type: decisive, taste-driven, pushes the user to ship the next concrete step.
+- Trusted senior type: familiar, practical, nudges without shame.
+- Deadline editor type: sharp, concise, cuts scope and demands a draft.
+- Study captain type: energetic, accountable, makes progress feel social.
+- Calm mentor type: grounded, minimal, helps the user return to focus.
+
+Weak persona directions:
+
+- Generic fantasy classes that do not explain why the notification motivates action.
+- Thin labels like Boss, Friend, Coach, or Sage without a specific motivational relationship.
+- Any direction that depends on recognizing a real person, outfit, quote, portrait, voice, or public identity.
 
 ### Rejected Alternatives
 
@@ -111,7 +135,7 @@ Main Home list item.
 Reusable small persona indicator.
 
 - Abstract pixel avatar or initials-style shape.
-- Persona/archetype label such as Coach, Mentor, Friend, Boss, Creator, Calm Guide.
+- Persona/archetype label such as visionary founder, trusted senior, deadline editor, study captain, calm mentor, or creator guide.
 - Optional selected/locked state.
 - Must not use real-person names or likenesses.
 
@@ -145,10 +169,11 @@ Allowed copy patterns:
 - "fictional persona"
 - "pixel persona"
 - "voice archetype"
-- "Coach style"
-- "Mentor tone"
-- "Creator energy"
-- "Boss nudge"
+- "visionary founder type"
+- "trusted senior tone"
+- "deadline editor nudge"
+- "study captain energy"
+- "calm mentor style"
 
 Disallowed copy patterns:
 
@@ -156,6 +181,7 @@ Disallowed copy patterns:
 - Public figure names.
 - "本人風" or "sounds like [real person]".
 - "celebrity voice" as a literal product claim.
+- Real acquaintance names, photos, portraits, or private details without explicit consent and abstraction.
 - Trademarked character/brand names.
 - Lyrics or direct quote promises.
 
@@ -253,11 +279,15 @@ Exact type names may differ if behavior and tests are equivalent.
 
 - Pixel accents could become noisy. Mitigation: keep reminders list-first and accents small.
 - Famous-person-like archetypes could drift into impersonation. Mitigation: safety copy and sample data tests.
+- Built-in personas could become too generic and lose the original motivation logic. Mitigation: require each seed/demo persona to document the motivating relationship it abstracts.
 - Large `App.tsx` edits could be risky. Mitigation: implement issue by issue, with view-model tests before styling expansion.
 - Generated visual references may include details not allowed by safety rules. Mitigation: text spec is normative; images are inspiration only.
 
 ## Open Questions
 
+- Release gate decision, 2026-06-12: v1 keeps ordinary system fonts. Pixel fonts remain deferred until a future typography issue resolves readability, licensing, and Expo packaging.
+- Release gate decision, 2026-06-12: v1 keeps primitive React Native pixel avatars and motifs. Generated, bundled, or marketplace-style pixel avatar assets remain deferred to a future asset pipeline issue.
+- Release gate decision, 2026-06-12: v1 keeps the CueUp brand name and current shared Pro/free limits. Naming and limit changes remain separate product decisions.
 - Should the final brand name remain CueUp or change to a TapIn-like name later?
 - Should future pixel avatars be generated assets, primitive shapes, or a bundled icon set?
 - Should Pro limits be revised in shared constants to match the attached product memo, or should the UI continue displaying current backend limits?

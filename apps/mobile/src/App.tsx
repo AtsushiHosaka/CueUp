@@ -427,6 +427,11 @@ export default function App() {
           </View>
           <Button label={copy.home.newReminder} compact onPress={openCreateReminder} />
         </View>
+        <View style={styles.quickNav}>
+          <QuickNavButton label={copy.tabs.history} onPress={() => goTo('history')} />
+          <QuickNavButton label={copy.tabs.store} onPress={() => goTo('packStore')} />
+          <QuickNavButton label={copy.tabs.settings} onPress={() => goTo('settings')} />
+        </View>
         {home.notificationBanner !== undefined ? (
           <View style={styles.notice}>
             <Text style={[styles.noticeTitle, importantFontStyle]}>
@@ -1210,12 +1215,7 @@ export default function App() {
       </ScrollView>
       {flow.authenticated ? (
         <View style={styles.tabBar}>
-          <Tab label={copy.tabs.home} active={flow.route === 'home'} onPress={() => goTo('home')} />
-          <Tab
-            label={copy.tabs.history}
-            active={flow.route === 'history'}
-            onPress={() => goTo('history')}
-          />
+          <Tab label={copy.tabs.home} active={flow.route !== 'chat'} onPress={() => goTo('home')} />
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={copy.home.newReminder}
@@ -1225,16 +1225,6 @@ export default function App() {
             <Text style={[styles.createTabButtonText, importantFontStyle]}>+</Text>
           </Pressable>
           <Tab label={copy.tabs.chat} active={flow.route === 'chat'} onPress={() => goTo('chat')} />
-          <Tab
-            label={copy.tabs.store}
-            active={flow.route === 'packStore' || flow.route === 'proUpsell'}
-            onPress={() => goTo('packStore')}
-          />
-          <Tab
-            label={copy.tabs.settings}
-            active={flow.route === 'settings'}
-            onPress={() => goTo('settings')}
-          />
         </View>
       ) : null}
     </SafeAreaView>
@@ -1441,6 +1431,18 @@ function Tab({ label, active, onPress }: { label: string; active: boolean; onPre
   );
 }
 
+function QuickNavButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.quickNavButton, pressed ? styles.pressed : undefined]}
+    >
+      <Text style={styles.quickNavButtonText}>{label}</Text>
+    </Pressable>
+  );
+}
+
 function Field({
   label,
   value,
@@ -1635,6 +1637,27 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 1,
     shadowRadius: 0,
+  },
+  quickNav: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    justifyContent: 'flex-end',
+  },
+  quickNavButton: {
+    backgroundColor: palette.surface,
+    borderColor: palette.border,
+    borderRadius: 4,
+    borderWidth: 1,
+    minHeight: 32,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+  quickNavButtonText: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: '800',
   },
   kicker: {
     color: palette.coral,
@@ -2302,18 +2325,21 @@ const styles = StyleSheet.create({
     borderTopWidth: 3,
     bottom: 0,
     flexDirection: 'row',
+    gap: 18,
+    justifyContent: 'center',
     left: 0,
-    minHeight: 80,
+    minHeight: 92,
     paddingBottom: 14,
+    paddingHorizontal: 24,
     paddingTop: 10,
     position: 'absolute',
     right: 0,
   },
   tab: {
     alignItems: 'center',
-    flex: 1,
     gap: 5,
     justifyContent: 'center',
+    minWidth: 72,
   },
   tabGlyph: {
     backgroundColor: '#789199',
@@ -2343,7 +2369,7 @@ const styles = StyleSheet.create({
     borderColor: palette.frame,
     borderRadius: 5,
     borderWidth: 3,
-    height: 58,
+    height: 60,
     justifyContent: 'center',
     shadowColor: palette.frame,
     shadowOffset: {
@@ -2352,7 +2378,7 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 1,
     shadowRadius: 0,
-    width: 58,
+    width: 60,
   },
   createTabButtonText: {
     color: palette.surface,

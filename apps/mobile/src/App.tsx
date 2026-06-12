@@ -1418,7 +1418,12 @@ function Segment({
 
 function Tab({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
   return (
-    <Pressable accessibilityRole="tab" onPress={onPress} style={styles.tab}>
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={styles.tab}
+    >
       <View style={[styles.tabGlyph, active ? styles.tabGlyphActive : undefined]} />
       <Text style={[styles.tabText, active ? styles.tabTextActive : undefined]}>{label}</Text>
     </Pressable>

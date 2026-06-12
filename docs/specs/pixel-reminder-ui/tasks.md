@@ -38,8 +38,8 @@
 
 ## 6. Visual QA and Release Gates
 
-- [ ] Run repository checks: `npm run format:check`, `npm run lint`, `npm run quality:check`, `npm test`, `npm run build`. Covers REQ-009, REQ-011.
-- [ ] Run Expo iOS export: `EXPO_NO_TELEMETRY=1 npx expo export --platform ios --output-dir /private/tmp/cueup-expo-export --clear`. Covers REQ-010.
-- [ ] Run Expo Go or simulator smoke QA for onboarding, Home, reminder form, character picker, History, Pro/Store, and Settings. Covers REQ-011.
-- [ ] Capture and review screenshots for initial and dense states, checking clipping, contrast, tap target spacing, and first-viewport reminder-list hierarchy. Covers UI-REQ-002, UI-REQ-003, UI-REQ-010.
-- [ ] Document deferred pixel fonts and avatar asset decisions. Covers open questions.
+- [x] Run repository checks: `npm run format:check`, `npm run lint`, `npm run quality:check`, `npm test`, `npm run build`. Covers REQ-009, REQ-011. See `qa-report.md`.
+- [x] Run Expo iOS export: `EXPO_NO_TELEMETRY=1 npx expo export --platform ios --output-dir /private/tmp/cueup-expo-export-46-final --clear`. Covers REQ-010. See `qa-report.md`.
+- [x] Run Expo Go or simulator smoke QA for onboarding, Home, reminder form, character picker, History, Pro/Store, and Settings. Covers REQ-011. See `qa-report.md`.
+- [x] Capture and review screenshots for initial and dense states, checking clipping, contrast, tap target spacing, and first-viewport reminder-list hierarchy. Covers UI-REQ-002, UI-REQ-003, UI-REQ-010. See `qa-report.md` and project-root `design-qa.md`.
+- [x] Document deferred pixel fonts and avatar asset decisions. Covers open questions. See `qa-report.md`.
